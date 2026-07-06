@@ -6,28 +6,32 @@ first, then this).
 
 ## State
 
-- Phase: 0 (research). Repo initialised, plan + sources written.
-- **IMPORTANT: the research is NOT done.** PLAN.md's feature checklist is from memory
-  of the project, not from a completed scan. Before implementing ANY area, the full
-  forensic pass is mandatory: read every remaining old module end to end, walk the
-  commit history, and mine the July 5 transcript (assistant messages too, not just the
-  user extract) for that area's decisions and bug fixes. DECISIONS.md must be written
-  from that scan, area by area, and is the spec the new code is written from.
-- Read so far from the old code: nbt.js (fully), transforms.js (fully),
-  full SV commit history (both pages of `git log v2-dev -- projects/structure-viewer ...`).
-- NOT yet read: app.js, optimise.js, jigsaw.js, combine.js, generators/*, walk.js,
-  structure.html, style.css. Read them via `git show v2-dev:projects/structure-viewer/<f>`
-  in the BlockModelRenderer repo, and mine the July 5 transcript per SOURCES.md.
-- docs/DECISIONS.md not started: it must capture, per area, the behaviours + the bugs
-  that were fixed (walk physics constants, jigsaw overlap rules, optimiser passes,
-  door handling, centring rules, seed semantics) BEFORE that area is reimplemented.
+- Phase: 0 (research) COMPLETE. The full forensic pass is done:
+  - Every old module read end to end (app.js, optimise.js, jigsaw.js, combine.js,
+    walk.js, generators/{igloo,endcity,mansion,index}.js, nbt.js, transforms.js,
+    structure.html, style.css, mojang-pack.js).
+  - Full SV commit history walked (~70 commits, oldest-first).
+  - July 5 transcript mined: all 841 user messages plus the assistant messages
+    (extracted to scratchpad assistant_msgs.txt, grepped per area) for the free-region
+    overlap fix, ow/carving semantics, ship-height verdict, per-level seed design and
+    why "reload last level" was removed, view-bob formulas, namespace + `structures/`
+    folder fixes, and the waterlogged-string library bug.
+- **docs/DECISIONS.md is written and is the spec.** 18 sections: nbt, transforms,
+  jigsaw solver, combine, generators, optimiser, walk, packs, discovery/tree,
+  worldgen index/filters, build pipeline, doors, level sessions/seeds/URL,
+  camera/grid/view, collect, export, locking, open questions. Write the new code
+  from it; do not port the old files.
+- No app code exists yet.
 
 ## Next steps
 
-1. Read the remaining old modules; write docs/DECISIONS.md area by area
-   (jigsaw+transforms+combine, generators, optimiser, walk, app behaviours).
-2. Mine the July 5 transcript for decisions not visible in code/commits.
-3. Commit docs. Then scaffold Vite + Vue 3 app (PLAN.md build order step 1).
+1. Scaffold Vite + Vue 3 app (PLAN.md build order step 1): base layout
+   (sidebar + viewport), library bootstrap (configure({ three }), runtime import of
+   http://localhost:8080/src/web.js), Material Symbols.
+2. Then follow PLAN.md's build order 2-10, implementing each area from DECISIONS.md,
+   committing + Playwright-testing each step and updating this file every commit.
+3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
+   pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 
 ## Environment notes
 
