@@ -1,11 +1,22 @@
 <script setup>
-import { onMounted, ref } from "vue"
+import { computed, onMounted, ref, watch } from "vue"
 import { loadLibrary } from "./lib.js"
 import { usePacks } from "./composables/usePacks.js"
+import { useStructures } from "./composables/useStructures.js"
+import { useStructure } from "./composables/useStructure.js"
 import PacksSection from "./components/PacksSection.vue"
+import StructuresSection from "./components/StructuresSection.vue"
 
 const libError = ref("")
 const { loadBase } = usePacks()
+const structures = useStructures()
+const { state: current, structure, loadVanilla } = useStructure()
+
+const info = computed(() => {
+  const s = structure.value
+  if (!s) return ""
+  return `${current.name} · ${s.size.join("×")} · ${s.blocks.length} blocks · ${s.palette.length} palette entries`
+})
 
 onMounted(async () => {
   try {
@@ -13,6 +24,14 @@ onMounted(async () => {
   } catch (err) {
     libError.value = String(err)
     return
+  }
+  const vanilla = new URLSearchParams(location.search).get("vanilla")
+  if (vanilla) {
+    const stop = watch(() => structures.state.names.length, n => {
+      if (!n) return
+      stop()
+      if (structures.has(vanilla)) loadVanilla(vanilla)
+    })
   }
   await loadBase()
 })
@@ -28,10 +47,14 @@ onMounted(async () => {
       <div v-if="libError" class="lib-error">Renderer failed: {{ libError }}</div>
       <template v-else>
         <PacksSection />
+        <StructuresSection />
       </template>
     </aside>
     <main class="viewport">
       <canvas id="view"></canvas>
+      <div v-if="current.error" class="chip error">{{ current.error }}</div>
+      <div v-else-if="current.loading" class="chip">Loading…</div>
+      <div v-else-if="info" class="chip">{{ info }}</div>
     </main>
   </div>
 </template>
@@ -50,7 +73,6 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
 }
 
 .app-head {
@@ -86,4 +108,18 @@ onMounted(async () => {
   height: 100%;
   display: block;
 }
+
+.chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #000000a0;
+  color: var(--text-dim);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.chip.error { color: var(--red); }
 </style>

@@ -46,15 +46,27 @@ and correct .js/.zip MIME types works).
   snapshot channels (?channel= param), add two real packs (Dokucraft + dungeons-
   and-taverns from Downloads), reorder, remove; console clean throughout.
 
+- Build step 3 (structure sources) DONE: src/nbt.js (reader per DECISIONS 1),
+  src/proc.js (PROC table), src/composables/useStructures.js (discovery across the
+  union of pack sources incl. legacy structures/ folders, worldgen index for
+  starters/standalone/structDepth, auto-refresh on assetsVersion),
+  src/composables/useStructure.js (current structure load: vanilla via readFile +
+  zip path, user .nbt upload, ?vanilla= param), StructuresSection.vue +
+  TreeFolder.vue (lazy folder tree, single-child chain compaction, namespace hidden
+  when sole, count badge, text filter flat list capped 500, all/standalone/starters
+  dropdown, Open Structure File). Playwright-verified on 26.2: 1212 structures,
+  starters 178/1212 (matches the old viewer exactly), standalone 128, igloo/top
+  loads (7×5×8, 152 blocks info chip), text filter shows full paths, ?vanilla=
+  reload auto-loads. Console clean.
+
 ## Next steps
 
-1. Build order step 3 (structure sources): nbt reader (DECISIONS 1), discovery of
-   data/<ns>/structure(s)/*.nbt across all pack sources (DECISIONS 9), sidebar tree
-   with compaction + namespace rules, text filter, .nbt upload. Worldgen filters
-   (DECISIONS 10) can land here or with step 7; the tree + all/standalone/starters
-   dropdown skeleton belongs here.
-2. Then steps 4-10 per PLAN.md, each from its DECISIONS.md section, committing +
-   Playwright-testing each and updating this file.
+1. Build order step 4 (basic build): three.js scene on the #view canvas (renderer,
+   perspective/ortho cameras, OrbitControls, fit view, grid), template-per-palette
+   build with legacy fixes + detached-group atomic swap, grid-snapped centring,
+   lighting select, info readout, global build lock. Spec: DECISIONS 11, 14, 17
+   (no optimiser yet: raw template clones per block).
+2. Then steps 5-10 per PLAN.md, each from its DECISIONS.md section.
 3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
    pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 
