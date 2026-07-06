@@ -2,11 +2,13 @@
 import { computed, ref } from "vue"
 import { useStructures } from "../composables/useStructures.js"
 import { useStructure } from "../composables/useStructure.js"
+import { useLock } from "../composables/useLock.js"
 import TreeFolder from "./TreeFolder.vue"
 
 const structures = useStructures()
 const { state, stateMut, computeWorldgen, filteredNames } = structures
-const { state: current, loadVanilla, loadFile } = useStructure()
+const { loadVanilla, loadFile } = useStructure()
+const { locked } = useLock()
 const fileInput = ref(null)
 
 const names = computed(() => {
@@ -76,7 +78,7 @@ function onFile(e) {
       </template>
       <TreeFolder v-else :node="tree" :auto-open-name="autoOpenName" />
     </div>
-    <button :disabled="current.loading" @click="fileInput.click()">
+    <button :disabled="locked" @click="fileInput.click()">
       <span class="material-symbols-outlined">upload_file</span>
       Open Structure File
     </button>

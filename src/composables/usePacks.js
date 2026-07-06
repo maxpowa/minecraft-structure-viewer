@@ -22,6 +22,11 @@ const state = reactive({
 
 const assets = shallowRef(null)
 
+// default swap used when an action isn't given one explicitly: the app
+// registers "rebuild the current scene with the new assets" here
+let swapHandler = null
+const setSwapHandler = fn => { swapHandler = fn }
+
 const setChannelParam = ch => {
   const u = new URL(location)
   ch === "snapshot" ? u.searchParams.set("channel", "snapshot") : u.searchParams.delete("channel")
@@ -38,7 +43,7 @@ async function rebuildAssets(swap) {
   assets.value = sources.length ? await lib.prepareAssets(sources, { cache: true }) : null
   state.assetsVersion++
   try {
-    await swap?.(assets.value)
+    await (swap ?? swapHandler)?.(assets.value)
   } finally {
     if (prev && prev !== assets.value) lib.disposeCache(prev)
   }
@@ -128,5 +133,5 @@ async function movePack(id, delta, swap) {
 const allSources = () => [...state.packs.map(p => bytesById.get(p.id)), baseBytes].filter(Boolean)
 
 export function usePacks() {
-  return { state: readonly(state), assets, loadBase, setChannel, addPacks, removePack, movePack, allSources }
+  return { state: readonly(state), assets, loadBase, setChannel, addPacks, removePack, movePack, allSources, setSwapHandler }
 }

@@ -4,18 +4,27 @@ import { loadLibrary } from "./lib.js"
 import { usePacks } from "./composables/usePacks.js"
 import { useStructures } from "./composables/useStructures.js"
 import { useStructure } from "./composables/useStructure.js"
+import { useBuild } from "./composables/useBuild.js"
+import { useScene } from "./composables/useScene.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
+import ViewSection from "./components/ViewSection.vue"
 
 const libError = ref("")
+const canvasEl = ref(null)
 const { loadBase } = usePacks()
 const structures = useStructures()
 const { state: current, structure, loadVanilla } = useStructure()
+const { state: buildState } = useBuild()
+const sceneApi = useScene()
+
+const fmtK = n => n >= 1000 ? +(n / 1000).toFixed(1) + "K" : String(Math.round(n))
 
 const info = computed(() => {
-  const s = structure.value
-  if (!s) return ""
-  return `${current.name} · ${s.size.join("×")} · ${s.blocks.length} blocks · ${s.palette.length} palette entries`
+  const i = buildState.info
+  if (!i) return ""
+  const name = current.name ? `${current.name} · ` : ""
+  return `${name}${i.size} · ${i.blocks} blocks · ${i.palette} palette entries · ${fmtK(i.rawDc)} draws · ${fmtK(i.rawTris)} tris`
 })
 
 onMounted(async () => {
@@ -25,6 +34,7 @@ onMounted(async () => {
     libError.value = String(err)
     return
   }
+  sceneApi.init(canvasEl.value)
   const vanilla = new URLSearchParams(location.search).get("vanilla")
   if (vanilla) {
     const stop = watch(() => structures.state.names.length, n => {
@@ -48,12 +58,13 @@ onMounted(async () => {
       <template v-else>
         <PacksSection />
         <StructuresSection />
+        <ViewSection />
       </template>
     </aside>
     <main class="viewport">
-      <canvas id="view"></canvas>
+      <canvas id="view" ref="canvasEl"></canvas>
       <div v-if="current.error" class="chip error">{{ current.error }}</div>
-      <div v-else-if="current.loading" class="chip">Loading…</div>
+      <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
       <div v-else-if="info" class="chip">{{ info }}</div>
     </main>
   </div>

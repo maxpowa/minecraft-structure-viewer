@@ -59,14 +59,26 @@ and correct .js/.zip MIME types works).
   loads (7×5×8, 152 blocks info chip), text filter shows full paths, ?vanilla=
   reload auto-loads. Console clean.
 
+- Build step 4 (basic build) DONE: useScene.js (renderer, persp/ortho cameras with
+  manual-vs-auto ortho revert, OrbitControls, fit at 30/225, block-aligned grid,
+  wireframe override material, rAF loop with animator registry), useBuild.js
+  (template per palette entry with legacy renames + wall prop fix, nonSolid
+  detection, raw clone-per-block group, grid-snapped centring, atomic swap +
+  dispose, info stats, lighting world/off rebuild), useLock.js (refcounted global
+  lock), useStructure funnels loads into build and registers the pack swap handler
+  (vanilla re-reads from new assets, else rebuild in place), ViewSection.vue.
+  Playwright-verified: igloo/top and village plains fountain render correctly
+  (textures, water, jigsaw blocks), ortho + wireframe + grid toggles work, filter
+  + selection work, console clean.
+
 ## Next steps
 
-1. Build order step 4 (basic build): three.js scene on the #view canvas (renderer,
-   perspective/ortho cameras, OrbitControls, fit view, grid), template-per-palette
-   build with legacy fixes + detached-group atomic swap, grid-snapped centring,
-   lighting select, info readout, global build lock. Spec: DECISIONS 11, 14, 17
-   (no optimiser yet: raw template clones per block).
-2. Then steps 5-10 per PLAN.md, each from its DECISIONS.md section.
+1. Build order step 5 (optimiser): the full DECISIONS 6 pipeline (extractFlat,
+   greedy meshing with phase lattice, atlases with extruded gutters + pixel-hash
+   dedupe, opaque/translucent split, animated in-place material fix, coplanar
+   overlay demotion, per-block getCullFaces culling memoised on neighbour states),
+   raw -> optimised info readout. Doors (DECISIONS 12) can come with it or after.
+2. Then steps 6-10 per PLAN.md.
 3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
    pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 
