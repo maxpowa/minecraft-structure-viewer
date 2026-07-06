@@ -1,0 +1,68 @@
+:root {
+  --bg: #16161a;
+  --panel: #1e1e24;
+  --panel-2: #26262d;
+  --border: #33333c;
+  --text: #e8e8ec;
+  --text-dim: #9a9aa4;
+  --accent: #4c8dff;
+  --green: #3fa66a;
+  --red: #e06a6a;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, sans-serif;
+  font-size: 14px;
+}
+
+[hidden] { display: none !important; }
+
+.material-symbols-outlined {
+  font-variation-settings: "opsz" 20, "wght" 400, "FILL" 0, "GRAD" 0;
+  font-size: 20px;
+  user-select: none;
+}
+
+button {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+
+button:hover:not(:disabled) { background: #2e2e36; }
+button:disabled { opacity: 0.5; cursor: default; }
+
+button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #fff;
+}
+
+button.primary:hover:not(:disabled) { background: #5d98ff; }
+
+input, select {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font: inherit;
+}
+
+input:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

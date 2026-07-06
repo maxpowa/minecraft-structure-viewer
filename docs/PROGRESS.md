@@ -21,15 +21,31 @@ first, then this).
   worldgen index/filters, build pipeline, doors, level sessions/seeds/URL,
   camera/grid/view, collect, export, locking, open questions. Write the new code
   from it; do not port the old files.
-- No app code exists yet.
+- Build step 1 (scaffold) DONE: Vite + Vue 3 app, sidebar + viewport layout,
+  Material Symbols link, library bootstrap in src/lib.js (npm three@0.162.0 handed
+  over via configure({ three }), runtime import of http://localhost:8080/src/web.js
+  with @vite-ignore, overridable via VITE_LIB_URL). Verified with Playwright on the
+  Vite dev server (npm run dev, port 5173): "Renderer ready", console clean.
+
+## Environment note: the 8080 library server
+
+The app runs on the Vite dev server (5173) so the library fetch is CROSS-ORIGIN now,
+unlike the old same-origin example pages. Ewan's 8080 server must send CORS headers
+(Access-Control-Allow-Origin) or the dynamic import fails with
+ERR_CONNECTION_REFUSED-style fetch errors. For testing without his server there is a
+tiny CORS static server in the session scratchpad (lib-server.mjs) serving the
+BlockModelRenderer repo on 8080; recreate it if lost (any static server with CORS
+and correct .js/.zip MIME types works).
 
 ## Next steps
 
-1. Scaffold Vite + Vue 3 app (PLAN.md build order step 1): base layout
-   (sidebar + viewport), library bootstrap (configure({ three }), runtime import of
-   http://localhost:8080/src/web.js), Material Symbols.
-2. Then follow PLAN.md's build order 2-10, implementing each area from DECISIONS.md,
-   committing + Playwright-testing each step and updating this file every commit.
+1. Build order step 2 (packs): vanilla release/snapshot channels via Mojang download
+   (cors.ewanhowell.com proxy, Cache Storage per channel) + the NEW ordered
+   multi-pack overlay list (add/remove/reorder over the vanilla base), prepareAssets
+   cache lifecycle (disposeCache old bundle only after swap). Spec: DECISIONS.md
+   section 8.
+2. Then steps 3-10 per PLAN.md, each from its DECISIONS.md section, committing +
+   Playwright-testing each and updating this file.
 3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
    pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 
