@@ -102,27 +102,24 @@ async function drawNameTag(spr, label) {
   spr.userData.ready = true
 }
 
-// block highlight: a bright inner box inside a dark halo box, readable on
-// any background (a single dark line disappears on dark scenes)
+// block highlight: one box whose lines invert whatever is behind them
+// (1 - dst via custom blending), so it reads on any background
 function makeHighlight() {
-  const inner = new THREE.Box3(), outer = new THREE.Box3()
-  const g = new THREE.Group()
-  const wire = new THREE.Box3Helper(inner, 0xffffff)
-  wire.material.transparent = true
-  wire.material.opacity = 0.9
-  const halo = new THREE.Box3Helper(outer, 0x000000)
-  halo.material.transparent = true
-  halo.material.opacity = 0.65
-  g.add(wire, halo)
-  g.visible = false
-  scene.add(g)
+  const box = new THREE.Box3()
+  const h = new THREE.Box3Helper(box, 0xffffff)
+  h.material.transparent = true
+  h.material.blending = THREE.CustomBlending
+  h.material.blendEquation = THREE.AddEquation
+  h.material.blendSrc = THREE.OneMinusDstColorFactor
+  h.material.blendDst = THREE.ZeroFactor
+  h.visible = false
+  scene.add(h)
   return {
-    show(box) {
-      inner.copy(box)
-      outer.copy(box).expandByScalar(0.35)
-      g.visible = true
+    show(b) {
+      box.copy(b)
+      h.visible = true
     },
-    hide() { g.visible = false }
+    hide() { h.visible = false }
   }
 }
 

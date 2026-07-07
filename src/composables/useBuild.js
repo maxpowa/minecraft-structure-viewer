@@ -184,19 +184,6 @@ let doorSlots = new Map() // canonKey -> { count, meshes: InstancedMesh[] }
 let stateRender = new Map() // stateIdx -> { key, rot: Matrix4 }
 let canonDoorTmpl = new Map() // canonKey -> template Group
 
-// state -> world-ish Box3 of its template (aim outline for doors/containers)
-let stateBoxCache = new Map()
-function boxForState(idx) {
-  if (stateBoxCache.has(idx)) return stateBoxCache.get(idx)
-  const tmpl = templates.get(idx)
-  let box = null
-  if (tmpl) {
-    tmpl.updateMatrixWorld(true)
-    box = new THREE.Box3().setFromObject(tmpl)
-  }
-  stateBoxCache.set(idx, box)
-  return box
-}
 const _dm = new THREE.Matrix4()
 const _dzero = new THREE.Matrix4().makeScale(0, 0, 0)
 
@@ -311,32 +298,19 @@ function interact(ox, oy, oz, dx, dy, dz) {
   return h?.container ?? false
 }
 
-// world-space box of the interactable being looked at (in-reach outline)
-const _aimV = new THREE.Vector3()
-function aimDoor(ox, oy, oz, dx, dy, dz) {
-  const h = rayHit(ox, oy, oz, dx, dy, dz)
-  if (!h) return null
-  const structure = current.value
-  let b, idx
-  if (h.door) {
-    b = h.door.b
-    const open = structure.palette[b.state].Properties.open === "true"
-    idx = open ? h.door.openIdx : h.door.closedIdx
-  } else {
-    b = h.container
-    idx = b.state
-  }
-  const box = boxForState(idx)
-  if (!box) return null
-  return _aimBox.copy(box).translate(_aimV.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16).add(root.position))
+// world-space full-cell (16^3) box of a block (aim + hover highlights)
+function boxForBlock(b) {
+  if (!b || !root) return null
+  const cx = b.pos[0] * 16 + root.position.x, cy = b.pos[1] * 16 + root.position.y, cz = b.pos[2] * 16 + root.position.z
+  _aimBox.min.set(cx - 8, cy - 8, cz - 8)
+  _aimBox.max.set(cx + 8, cy + 8, cz + 8)
+  return _aimBox
 }
 
-// world-space box of a specific block (orbit-mode hover highlight)
-const _blkBox = new THREE.Box3(), _blkV = new THREE.Vector3()
-function boxForBlock(b) {
-  const box = b && boxForState(b.state)
-  if (!box || !root) return null
-  return _blkBox.copy(box).translate(_blkV.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16).add(root.position))
+// full-cell box of the interactable being looked at (in-reach outline)
+function aimDoor(ox, oy, oz, dx, dy, dz) {
+  const h = rayHit(ox, oy, oz, dx, dy, dz)
+  return h ? boxForBlock(h.door ? h.door.b : h.container) : null
 }
 
 // the raw structure block at a world position (orbit-mode picking)
@@ -412,7 +386,6 @@ async function build(structure = source, refit = true) {
 
     templates = new Map()
     nonSolid = new Set()
-    stateBoxCache = new Map()
     const isPlane = el => el.from[0] === el.to[0] || el.from[1] === el.to[1] || el.from[2] === el.to[2]
     async function template(stateIdx) {
       if (templates.has(stateIdx)) return templates.get(stateIdx)
