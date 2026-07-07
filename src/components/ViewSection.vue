@@ -48,6 +48,10 @@ function onExport(ev) {
       Grid
     </label>
     <label class="check">
+      <input type="checkbox" v-model="buildState.hideStructureBlocks" :disabled="locked">
+      Hide Structure Blocks
+    </label>
+    <label class="check">
       <input type="checkbox" v-model="buildState.collect" :disabled="locked">
       Collect structures
     </label>

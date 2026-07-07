@@ -86,7 +86,8 @@ async function onAssetsSwapped() {
       }
     } catch {}
   }
-  if (structure.value) await buildApi.build(structure.value, false)
+  // no args: rebuild the build's own source (current may be a display strip)
+  if (structure.value) await buildApi.build(undefined, false)
 }
 packs.setSwapHandler(onAssetsSwapped)
 

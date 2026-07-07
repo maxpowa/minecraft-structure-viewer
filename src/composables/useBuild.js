@@ -6,6 +6,7 @@ import { useScene } from "./useScene.js"
 import { useLock } from "./useLock.js"
 import { optimise } from "../optimise.js"
 import { exportScene } from "../export.js"
+import { JIGSAW, parseState } from "../transforms.js"
 
 const packs = usePacks()
 const sceneApi = useScene()
@@ -21,6 +22,38 @@ const LEGACY_RENAMES = {
   chain: "iron_chain",
   sign: "oak_sign",
   wall_sign: "oak_wall_sign"
+}
+
+// display option: technical blocks resolved away, like the game after
+// generation: jigsaws become their final_state, structure blocks disappear
+const SB = /(^|:)structure_block$/
+function stripStructureBlocks(structure) {
+  const isTech = b => {
+    const n = structure.palette[b.state]?.Name || ""
+    return JIGSAW.test(n) || SB.test(n)
+  }
+  if (!structure.blocks.some(isTech)) return structure
+  const palette = structure.palette.slice()
+  const idx = new Map()
+  const stateFor = e => {
+    const key = e.Name + "|" + JSON.stringify(e.Properties ?? null)
+    let i = idx.get(key)
+    if (i === undefined) {
+      i = palette.findIndex(pe => pe.Name === e.Name && sameProps(pe.Properties, e.Properties))
+      if (i < 0) { i = palette.length; palette.push(e) }
+      idx.set(key, i)
+    }
+    return i
+  }
+  const blocks = []
+  for (const b of structure.blocks) {
+    if (!isTech(b)) { blocks.push(b); continue }
+    if (JIGSAW.test(structure.palette[b.state].Name)) {
+      const fs = parseState(typeof b.nbt?.final_state === "string" ? b.nbt.final_state : "")
+      if (!AIR.test(fs.Name)) blocks.push({ pos: b.pos, state: stateFor(fs) })
+    }
+  }
+  return { ...structure, palette, blocks }
 }
 
 // walls went from boolean north/south/east/west to none/low/tall in 1.16
@@ -39,6 +72,7 @@ function fixLegacyProps(name, props) {
 
 const state = reactive({
   lighting: "world",
+  hideStructureBlocks: localStorage.getItem("hideStructureBlocks") !== "false",
   collect: false,
   placedCount: 0,
   building: false,
@@ -59,6 +93,7 @@ const sameProps = (a, b) => {
 }
 
 const current = shallowRef(null)
+let source = null // the structure as loaded/combined; current may be a display strip of it
 let root = null
 let animator = null
 let templates = null
@@ -215,7 +250,7 @@ function clearPlaced() {
 async function clearCollected() {
   if (state.building) return
   clearPlaced()
-  if (current.value) await build(current.value)
+  if (source) await build()
   else sceneApi.remakeGrid()
 }
 
@@ -270,10 +305,10 @@ function disposeGroup(g) {
 
 // replace: the structure object is fresh but stands in for the current one
 // (pack swap re-read), so it must not count as a new load
-async function build(structure = current.value, refit = true, replace = false) {
+async function build(structure = source, refit = true, replace = false) {
   const assets = packs.assets.value
   if (!assets || !structure || state.building) return
-  const isNew = !replace && structure !== current.value
+  const isNew = !replace && structure !== source
   state.building = true
   lock(true)
   try {
@@ -281,6 +316,8 @@ async function build(structure = current.value, refit = true, replace = false) {
       if (state.collect && root) commitCurrent()
       else if (!state.collect) clearPlaced()
     }
+    source = structure
+    if (state.hideStructureBlocks) structure = stripStructureBlocks(structure)
     current.value = structure
     const lib = await loadLibrary()
     const [sx, sy, sz] = structure.size
@@ -380,7 +417,11 @@ async function build(structure = current.value, refit = true, replace = false) {
   }
 }
 
-watch(() => state.lighting, () => { if (current.value) build(current.value, false) })
+watch(() => state.lighting, () => build(undefined, false))
+watch(() => state.hideStructureBlocks, v => {
+  localStorage.setItem("hideStructureBlocks", String(v))
+  build(undefined, false)
+})
 
 async function exportCurrent(format, name) {
   if (!root || state.building) return
