@@ -97,15 +97,18 @@ function fit() {
   controls.update()
 }
 
-// compare against the tracked CSS size, NOT canvas.width: that's the buffer
-// size (css * pixelRatio), so the old check mismatched every frame and
-// re-ran setSize per frame
+// resize when the CSS size or device pixel ratio changes, and also when the
+// buffer itself no longer matches: browsers can shrink or drop a hidden
+// tab's backing store, which used to be silently repaired by the old
+// setSize-every-frame bug
 let sizeW = 0, sizeH = 0
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight
-  if (w !== sizeW || h !== sizeH) {
+  const ratio = Math.min(window.devicePixelRatio * 2, 4)
+  if (w !== sizeW || h !== sizeH || renderer.getPixelRatio() !== ratio || canvas.width !== Math.floor(w * ratio)) {
     sizeW = w
     sizeH = h
+    renderer.setPixelRatio(ratio)
     renderer.setSize(w, h, false)
     updateProjection()
   }
