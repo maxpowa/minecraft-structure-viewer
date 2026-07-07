@@ -251,6 +251,46 @@ function attachDoors(entries) {
   return draws
 }
 
+// structure entities whose id also resolves as a block (the cushion
+// overrides, straw-bed-style blocks) render as live models at the entity's
+// exact position: no cull faces, never a neighbour to anything, no collision.
+// yaw snaps to the nearest cardinal like the game's Direction.fromYRot
+async function attachEntities(structure, lib, assets) {
+  let draws = 0
+  const groupCache = new Map()
+  for (const e of structure.entities ?? []) {
+    const id = e.nbt?.id
+    if (typeof id !== "string") continue
+    const [ns, name] = id.includes(":") ? id.split(":") : ["minecraft", id]
+    const yaw = Number(e.nbt.Rotation?.[0] ?? 0)
+    const facing = ["south", "west", "north", "east"][((Math.floor(yaw / 90 + 0.5) % 4) + 4) % 4]
+    const key = id + "|" + facing
+    let template = groupCache.get(key)
+    if (template === undefined) {
+      template = null
+      try {
+        if (await lib.readFile(`assets/${ns}/blockstates/${name}.json`, assets)) {
+          const g = new THREE.Group()
+          for (const model of await lib.parseBlockstate(assets, id, { data: { facing }, ignoreAtlases: true })) {
+            const data = await lib.resolveModelData(assets, model)
+            await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
+          }
+          if (g.children.length) template = g
+        }
+      } catch {}
+      groupCache.set(key, template)
+    }
+    if (!template) continue
+    const g = groupCache.get(key).clone()
+    // block units -> world: cell centres sit at pos*16, cells span +-8, so a
+    // point maps to pos*16 - 8; the template's bottom is -8, hence y stays
+    g.position.set(e.pos[0] * 16 - 8, e.pos[1] * 16, e.pos[2] * 16 - 8)
+    root.add(g)
+    g.traverse(o => { if (o.isMesh) draws++ })
+  }
+  return draws
+}
+
 // flip an openable block (and the other door half): swap the instance
 // matrices and repoint its state so collision boxes follow
 function toggleDoor(reg) {
@@ -624,6 +664,7 @@ async function build(structure = source, refit = true) {
     if (old) sceneApi.contentRoots.delete(old)
     if (animator) sceneApi.animators.delete(animator)
     const doorDraws = attachDoors(doorEntries)
+    const entityDraws = await attachEntities(structure, lib, assets)
     animator = lib.createAnimator(root)
     sceneApi.animators.add(animator)
     // one floor grid per structure part, hugging its footprint with a 3-block
@@ -646,7 +687,7 @@ async function build(structure = source, refit = true) {
       size: `${sx}×${sy}×${sz}`,
       blocks: placedCount,
       palette: templates.size,
-      draws: drawCalls + doorDraws,
+      draws: drawCalls + doorDraws + entityDraws,
       tris
     }
     state.status = ""

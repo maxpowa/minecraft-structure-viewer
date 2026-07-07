@@ -111,6 +111,7 @@ function packLoaded() {
     return i
   }
   const blocks = []
+  const entities = []
   let mx = 1, my = 1, mz = 1
   for (const p of parts) {
     const map = p.s.palette.map(e => e?.Name ? stateFor(e) : 0)
@@ -119,13 +120,16 @@ function packLoaded() {
       if (b.nbt) block.nbt = b.nbt
       blocks.push(block)
     }
+    for (const e of p.s.entities ?? []) {
+      entities.push({ ...e, pos: [e.pos[0] + p.off[0], e.pos[1] + p.off[1], e.pos[2] + p.off[2]] })
+    }
     mx = Math.max(mx, p.off[0] + p.size[0])
     my = Math.max(my, p.off[1] + p.size[1])
     mz = Math.max(mz, p.off[2] + p.size[2])
   }
   return {
     size: [mx, my, mz],
-    palette, blocks,
+    palette, blocks, entities,
     __parts: parts.map(({ off, size, name }) => ({ off, size, name }))
   }
 }

@@ -74,7 +74,8 @@ export async function readNBT(input, { littleEndian = false } = {}) {
 }
 
 // palette entries are { Name, Properties? }; blocks are { state, pos, nbt? }.
-// some vanilla files (shipwrecks) use the plural `palettes` form.
+// some vanilla files (shipwrecks) use the plural `palettes` form. entities
+// keep their exact double position (block units) and raw nbt.
 export async function readStructure(input) {
   const root = await readNBT(input)
   const size = (root.size ?? [0, 0, 0]).map(Number)
@@ -84,5 +85,9 @@ export async function readStructure(input) {
     pos: b.pos.map(Number),
     nbt: b.nbt
   }))
-  return { size, palette, blocks }
+  const entities = (root.entities ?? []).flatMap(e => e.nbt ? [{
+    pos: (e.pos ?? e.blockPos ?? [0, 0, 0]).map(Number),
+    nbt: e.nbt
+  }] : [])
+  return { size, palette, blocks, entities }
 }
