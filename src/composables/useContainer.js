@@ -146,7 +146,7 @@ function display(scatter = false) {
     state.stacks = pile.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: slots[i] }))
   } else {
     state.gui = { ...KINDS.generic, rows: Math.max(3, Math.ceil(pile.length / KINDS.generic.cols)) }
-    state.guiTitle = `${state.rolls} open${state.rolls === 1 ? "" : "s"} - ${state.pileTotal} item${state.pileTotal === 1 ? "" : "s"}`
+    state.guiTitle = state.blockName
     const sorted = [...pile].sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
     state.stacks = sorted.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
   }

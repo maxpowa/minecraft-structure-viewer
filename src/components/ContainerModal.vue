@@ -225,7 +225,10 @@ watch(() => [state.open, state.stacks, state.gui], () => {
             <span class="material-symbols-outlined">shuffle</span>
             Re-roll
           </button>
-          <span></span>
+          <span class="roll-stats" v-if="state.rolls > 1">
+            {{ state.rolls }} opens · {{ state.pileTotal }} item{{ state.pileTotal === 1 ? "" : "s" }}
+          </span>
+          <span v-else></span>
           <div class="right">
             <button :disabled="rendering" @click="container.addRoll()">
               <span class="material-symbols-outlined">casino</span>
@@ -369,6 +372,12 @@ button.icon {
   justify-self: end;
   display: flex;
   gap: 6px;
+}
+
+.roll-stats {
+  font-size: 12px;
+  color: var(--text-dim);
+  text-align: center;
 }
 
 .actions .material-symbols-outlined { font-size: 18px; }
