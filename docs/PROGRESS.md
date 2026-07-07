@@ -200,6 +200,8 @@ says otherwise:
 
 - Ewan hosts `http://localhost:8080/` serving the BlockModelRenderer repo (library dev
   CDN stand-in). Playwright MCP is the browser-testing tool (NOT the preview MCP).
+- Since 2026-07-07: do NOT test/verify changes (Playwright or otherwise) unless Ewan
+  explicitly asks; he checks changes himself.
 - Vite dev server: run in background, test pages with Playwright against it.
 - Do not run npm render scripts in the library repo; visual verification is Ewan's.
 - Commit style: lowercase, terse, subject well under 72 chars, body only when it earns
