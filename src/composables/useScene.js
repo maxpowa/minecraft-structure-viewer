@@ -62,7 +62,7 @@ function makeNorth({ x, z, y, w, d }) {
   const geo = new THREE.BufferGeometry()
   geo.setAttribute("position", new THREE.Float32BufferAttribute([x0, y, zb, x0, y, zt, x0, y, zt, x1, y, zb, x1, y, zb, x1, y, zt], 3))
   const seg = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x62626a }))
-  seg.userData = { center: new THREE.Vector3(x + w * 8, y, z + d * 8), showDist: Math.max(600, Math.hypot(w, d) * 40) }
+  seg.userData = { at: new THREE.Vector3(nx, y, z - 6), showDist: 700 }
   return seg
 }
 
@@ -108,7 +108,7 @@ function makeNameTag({ x, z, y, w, d, label }) {
   const spr = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true }))
   spr.visible = false
   spr.position.set(x + w * 8, y + 6, z - 6)
-  spr.userData = { center: new THREE.Vector3(x + w * 8, y, z + d * 8), showDist: Math.max(350, Math.hypot(w, d) * 20), fades: true, ready: false }
+  spr.userData = { at: spr.position, showDist: 450, fades: true, ready: false }
   drawNameTag(spr, label)
   return spr
 }
@@ -146,7 +146,7 @@ function updateGridLabels() {
   for (const o of gridGroup.children) {
     const u = o.userData
     if (!u.showDist) continue
-    const dist = camera.position.distanceTo(u.center) / (camera.zoom || 1)
+    const dist = camera.position.distanceTo(u.at) / (camera.zoom || 1)
     if (u.fades) {
       if (!u.ready) { o.visible = false; continue }
       const f = Math.min(Math.max((u.showDist - dist) / (u.showDist * 0.15), 0), 1)
