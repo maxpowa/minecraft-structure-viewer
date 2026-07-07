@@ -32,7 +32,7 @@ const { lock, locked } = useLock()
 const state = reactive({
   active: false,
   kind: null,     // "jigsaw" | a PROC gen name
-  label: "structure blocks",
+  label: "Structure Blocks",
   steps: true,
   level: 0,
   maxDepth: 7,
@@ -193,7 +193,7 @@ async function startSession(structure, name) {
     state.maxDepth = proc.maxDepth ?? 1
   } else if (isJigsaw) {
     state.kind = "jigsaw"
-    state.label = "structure blocks"
+    state.label = "Structure Blocks"
     state.steps = true
     await structures.computeWorldgen()
     state.maxDepth = structures.getStructDepth(name) ?? 7

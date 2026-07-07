@@ -11,29 +11,30 @@ const open = ref(false)
 
 <template>
   <div v-if="s.active" class="level-menu" :class="{ locked }">
+    <!-- buttons that can't do anything at this level aren't rendered at all -->
     <div v-if="open" class="panel">
       <template v-if="s.steps">
-        <button :disabled="locked || s.level >= s.maxDepth" @click="session.next()">
+        <button v-if="s.level < s.maxDepth" :disabled="locked" @click="session.next()">
           <span class="material-symbols-outlined">skip_next</span>
           Load Next Level
         </button>
-        <button :disabled="locked || s.level >= s.maxDepth" @click="session.all()">
+        <button v-if="s.level < s.maxDepth" :disabled="locked" @click="session.all()">
           <span class="material-symbols-outlined">fast_forward</span>
           Load All Levels
         </button>
-        <button :disabled="locked || s.level === 0" @click="session.undo()">
+        <button v-if="s.level > 0" :disabled="locked" @click="session.undo()">
           <span class="material-symbols-outlined">undo</span>
           Undo Level
         </button>
-        <button v-if="s.kind === 'jigsaw'" :disabled="locked || s.level === 0" @click="session.reloadAll()">
+        <button v-if="s.kind === 'jigsaw' && s.level > 0" :disabled="locked" @click="session.reloadAll()">
           <span class="material-symbols-outlined">refresh</span>
           Reload
         </button>
-        <button :disabled="locked" @click="session.fullReload()">
+        <button v-if="s.level > 0" :disabled="locked" @click="session.fullReload()">
           <span class="material-symbols-outlined">restart_alt</span>
           Full Reload
         </button>
-        <button :disabled="locked || s.level === 0" @click="session.reset()">
+        <button v-if="s.level > 0" :disabled="locked" @click="session.reset()">
           <span class="material-symbols-outlined">first_page</span>
           Reset
         </button>
@@ -45,7 +46,7 @@ const open = ref(false)
     </div>
     <button class="head" @click="open = !open">
       <span class="material-symbols-outlined">{{ open ? "expand_more" : "expand_less" }}</span>
-      {{ s.steps ? `${s.label} · level ${s.level + 1}` : s.label }}
+      {{ s.steps ? `${s.label} · Level ${s.level + 1}` : s.label }}
     </button>
   </div>
 </template>
