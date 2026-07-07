@@ -48,6 +48,12 @@ function makeRectGrid({ x, z, w, d, y }) {
     P.push(x, y, z + j * 16, x + w * 16, y, z + j * 16)
     push(j * 2 === d ? cross : line)
   }
+  // north indicator: a vector "N" just past the north (-z) edge, drawn with
+  // the same line material so it stays crisp at any zoom
+  const nx = x + w * 8, x0 = nx - 4, x1 = nx + 4, zb = z - 4, zt = z - 14
+  P.push(x0, y, zb, x0, y, zt, x0, y, zt, x1, y, zb, x1, y, zb, x1, y, zt)
+  const ncol = new THREE.Color(0x62626a)
+  for (let i = 0; i < 3; i++) push(ncol)
   const geo = new THREE.BufferGeometry()
   geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3))
   geo.setAttribute("color", new THREE.Float32BufferAttribute(C, 3))
