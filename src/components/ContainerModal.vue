@@ -184,7 +184,7 @@ watch(() => [state.open, state.stacks, state.gui], () => {
           <div v-if="state.tab === 'list'" class="pane">
             <div v-if="!listStacks.length" class="empty">Empty.</div>
             <div v-for="(s, i) in listStacks" :key="i" class="item-row">
-              <ItemIcon :id="s.id" :components="s.components" :size="28" />
+              <ItemIcon :id="s.id" :components="s.components" :size="32" />
               <span class="nm" :title="stackName(s)">{{ stackName(s) }}</span>
               <span class="cntv big">×{{ s.count }}</span>
             </div>
@@ -196,7 +196,7 @@ watch(() => [state.open, state.stacks, state.gui], () => {
             <template v-else-if="state.odds">
               <div class="cols"><span class="nm">Item · most common first</span><span class="chance-h">Chance</span><span class="cnt-h">Amount</span></div>
               <div v-for="o in state.odds" :key="o.id + JSON.stringify(o.components ?? null)" class="item-row">
-                <ItemIcon :id="o.id" :components="o.components" :size="28" />
+                <ItemIcon :id="o.id" :components="o.components" :size="32" />
                 <span class="nm" :title="stackName(o)">{{ stackName(o) }}</span>
                 <span class="meter"><i :style="{ width: Math.max(o.chance * 100, 1.5) + '%' }"></i></span>
                 <span class="pctv">{{ fmtPct(o.chance) }}</span>
