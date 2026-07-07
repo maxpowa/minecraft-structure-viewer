@@ -264,14 +264,18 @@ async function attachEntities(structure, lib, assets) {
     const [ns, name] = id.includes(":") ? id.split(":") : ["minecraft", id]
     const yaw = Number(e.nbt.Rotation?.[0] ?? 0)
     const facing = ["south", "west", "north", "east"][((Math.floor(yaw / 90 + 0.5) % 4) + 4) % 4]
-    const key = id + "|" + facing
+    // entity nbt strings double as blockstate properties (cushions keep
+    // their colour there: color: "pink"), plus the yaw-derived facing
+    const data = { facing }
+    for (const [k, v] of Object.entries(e.nbt)) if (typeof v === "string" && k !== "id") data[k] = v
+    const key = id + "|" + JSON.stringify(data)
     let template = groupCache.get(key)
     if (template === undefined) {
       template = null
       try {
         if (await lib.readFile(`assets/${ns}/blockstates/${name}.json`, assets)) {
           const g = new THREE.Group()
-          for (const model of await lib.parseBlockstate(assets, id, { data: { facing }, ignoreAtlases: true })) {
+          for (const model of await lib.parseBlockstate(assets, id, { data, ignoreAtlases: true })) {
             const data = await lib.resolveModelData(assets, model)
             await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
           }
