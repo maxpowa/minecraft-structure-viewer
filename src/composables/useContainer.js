@@ -12,10 +12,11 @@ const sceneApi = useScene()
 const buildApi = useBuild()
 
 // gui metrics: texture name, its full height, how much of the top is the
-// container section, and where the slot grid starts
+// container section, and where the slot grid starts. tiled guis compose
+// header + n slot-row strips + bottom, so their row count can grow
 const KINDS = {
-  generic: { tex: "generic_54", texH: 222, cropH: 71, cols: 9, rows: 3, ox: 7, oy: 17 },
-  shulker: { tex: "shulker_box", texH: 166, cropH: 71, cols: 9, rows: 3, ox: 7, oy: 17 },
+  generic: { tex: "generic_54", texH: 222, cropH: 71, tile: true, cols: 9, rows: 3, ox: 7, oy: 17 },
+  shulker: { tex: "shulker_box", texH: 166, cropH: 71, tile: true, cols: 9, rows: 3, ox: 7, oy: 17 },
   dispenser: { tex: "dispenser", texH: 166, cropH: 71, cols: 3, rows: 3, ox: 61, oy: 16 },
   hopper: { tex: "hopper", texH: 133, cropH: 43, cols: 5, rows: 1, ox: 43, oy: 19 }
 }
@@ -42,7 +43,8 @@ const state = reactive({
   oddsBusy: false,
   rolls: 0,        // opens accumulated into the gui pile
   pileTotal: 0,
-  hiddenStacks: 0
+  gui: null,       // the gui actually drawn (accumulated piles grow a chest)
+  guiTitle: ""
 })
 
 let openSeq = 0 // bumps per open(): stale async work from a previous container is discarded
@@ -62,7 +64,8 @@ async function open(block) {
   state.oddsBusy = false
   state.rolls = 0
   state.pileTotal = 0
-  state.hiddenStacks = 0
+  state.gui = kindOf(name)
+  state.guiTitle = state.blockName
   pile = []
   openSeq++
   state.open = true
@@ -126,24 +129,27 @@ function mergeRoll(loot) {
   }
 }
 
-// a fresh single open scatters into random slots like the game fills a
-// chest; accumulated piles sort biggest first instead. stacks past the
-// slot count drop off the display (the counter still includes them)
+// a fresh single open scatters into the block's own gui in random slots
+// like the game fills a chest. accumulated piles switch to a chest gui
+// that grows rows to fit, biggest stacks first, with the stats as title
 function display(scatter = false) {
-  const cap = state.kind.cols * state.kind.rows
-  if (scatter && pile.length <= cap) {
-    const slots = [...Array(cap).keys()]
+  state.pileTotal = pile.reduce((a, s) => a + s.count, 0)
+  const ownCap = state.kind.cols * state.kind.rows
+  if (scatter && pile.length <= ownCap) {
+    state.gui = state.kind
+    state.guiTitle = state.blockName
+    const slots = [...Array(ownCap).keys()]
     for (let i = slots.length - 1; i > 0; i--) {
       const j = Math.random() * (i + 1) | 0
       ;[slots[i], slots[j]] = [slots[j], slots[i]]
     }
     state.stacks = pile.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: slots[i] }))
   } else {
+    state.gui = { ...KINDS.generic, rows: Math.max(3, Math.ceil(pile.length / KINDS.generic.cols)) }
+    state.guiTitle = `${state.rolls} open${state.rolls === 1 ? "" : "s"} - ${state.pileTotal} item${state.pileTotal === 1 ? "" : "s"}`
     const sorted = [...pile].sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
-    state.stacks = sorted.slice(0, cap).map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
+    state.stacks = sorted.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
   }
-  state.pileTotal = pile.reduce((a, s) => a + s.count, 0)
-  state.hiddenStacks = Math.max(0, pile.length - cap)
 }
 
 async function reroll() {

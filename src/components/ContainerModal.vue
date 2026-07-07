@@ -58,13 +58,17 @@ const inner = (K, slot) => [K.ox + (slot % K.cols) * 18 + 1, K.oy + (slot / K.co
 // two stacked canvases: the gui texture + title draw immediately when the
 // modal opens, items render on the overlay as they finish, so a re-roll
 // never flashes the background away
+// container section height: tiled guis are header + n slot rows, the rest
+// use their fixed crop
+const bodyH = K => K.tile ? 17 + K.rows * 18 : K.cropH
+
 let bgSeq = 0
 async function drawBg() {
-  const c = bgEl.value, K = state.kind
+  const c = bgEl.value, K = state.gui
   if (!c || !K) return
   const seq = ++bgSeq
   c.width = 176 * S
-  c.height = (K.cropH + 7) * S
+  c.height = (bodyH(K) + 7) * S
   const lib = await loadLibrary()
   const assets = packs.assets.value
   const [bgBuf, font] = await Promise.all([
@@ -76,14 +80,19 @@ async function drawBg() {
   if (seq !== bgSeq) return
   const ctx = c.getContext("2d")
   ctx.imageSmoothingEnabled = false
-  ctx.drawImage(img, 0, 0, 176, K.cropH, 0, 0, 176 * S, K.cropH * S)
-  ctx.drawImage(img, 0, K.texH - 7, 176, 7, 0, K.cropH * S, 176 * S, 7 * S)
-  drawText(ctx, font, state.blockName, 8 * S, 6 * S, { scale: S, color: "#404040" })
+  if (K.tile) {
+    ctx.drawImage(img, 0, 0, 176, 17, 0, 0, 176 * S, 17 * S)
+    for (let r = 0; r < K.rows; r++) ctx.drawImage(img, 0, 17, 176, 18, 0, (17 + r * 18) * S, 176 * S, 18 * S)
+  } else {
+    ctx.drawImage(img, 0, 0, 176, K.cropH, 0, 0, 176 * S, K.cropH * S)
+  }
+  ctx.drawImage(img, 0, K.texH - 7, 176, 7, 0, bodyH(K) * S, 176 * S, 7 * S)
+  drawText(ctx, font, state.guiTitle, 8 * S, 6 * S, { scale: S, color: "#404040" })
 }
 
 let itemSeq = 0
 async function drawItems() {
-  const c = itemsEl.value, K = state.kind
+  const c = itemsEl.value, K = state.gui
   if (!c || !K) return
   const seq = ++itemSeq
   rendering.value = true
@@ -96,7 +105,7 @@ async function drawItems() {
 
 async function drawItemsInner(c, K, seq) {
   c.width = 176 * S
-  c.height = (K.cropH + 7) * S
+  c.height = (bodyH(K) + 7) * S
   const lib = await loadLibrary()
   const assets = packs.assets.value
   const font = await getFont()
@@ -127,10 +136,10 @@ async function drawItemsInner(c, K, seq) {
   }
 }
 
-watch(() => [state.open, state.kind, state.blockName], () => {
+watch(() => [state.open, state.gui, state.guiTitle], () => {
   if (state.open) nextTick(drawBg)
 })
-watch(() => [state.open, state.stacks], () => {
+watch(() => [state.open, state.stacks, state.gui], () => {
   if (state.open) nextTick(drawItems)
 })
 </script>
@@ -166,10 +175,7 @@ watch(() => [state.open, state.stacks], () => {
                 <span class="material-symbols-outlined">shuffle</span>
                 Re-roll
               </button>
-              <span class="roll-stats" v-if="state.rolls > 1 || state.hiddenStacks">
-                {{ state.rolls }} open{{ state.rolls === 1 ? "" : "s" }} · {{ state.pileTotal }} item{{ state.pileTotal === 1 ? "" : "s" }}<template v-if="state.hiddenStacks"> · {{ state.hiddenStacks }} stack{{ state.hiddenStacks === 1 ? "" : "s" }} hidden</template>
-              </span>
-              <span v-else></span>
+              <span></span>
               <div class="right">
                 <button :disabled="rendering" @click="container.addRoll()">
                   <span class="material-symbols-outlined">casino</span>
@@ -345,12 +351,6 @@ button.icon {
   justify-self: end;
   display: flex;
   gap: 6px;
-}
-
-.roll-stats {
-  font-size: 12px;
-  color: var(--text-dim);
-  text-align: center;
 }
 
 .actions .material-symbols-outlined { font-size: 18px; }
