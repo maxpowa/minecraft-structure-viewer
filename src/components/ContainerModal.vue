@@ -166,8 +166,8 @@ watch(() => [state.open, state.stacks], () => {
                 <span class="material-symbols-outlined">shuffle</span>
                 Re-roll
               </button>
-              <span class="roll-stats" v-if="state.rolls > 1">
-                {{ state.rolls }} opens · {{ state.pileTotal }} item{{ state.pileTotal === 1 ? "" : "s" }}
+              <span class="roll-stats" v-if="state.rolls > 1 || state.hiddenStacks">
+                {{ state.rolls }} open{{ state.rolls === 1 ? "" : "s" }} · {{ state.pileTotal }} item{{ state.pileTotal === 1 ? "" : "s" }}<template v-if="state.hiddenStacks"> · {{ state.hiddenStacks }} stack{{ state.hiddenStacks === 1 ? "" : "s" }} hidden</template>
               </span>
               <span v-else></span>
               <div class="right">

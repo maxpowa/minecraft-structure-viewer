@@ -41,7 +41,8 @@ const state = reactive({
   odds: null,      // sampleTable result, computed once per open on demand
   oddsBusy: false,
   rolls: 0,        // opens accumulated into the gui pile
-  pileTotal: 0
+  pileTotal: 0,
+  hiddenStacks: 0
 })
 
 let openSeq = 0 // bumps per open(): stale async work from a previous container is discarded
@@ -61,6 +62,7 @@ async function open(block) {
   state.oddsBusy = false
   state.rolls = 0
   state.pileTotal = 0
+  state.hiddenStacks = 0
   pile = []
   openSeq++
   state.open = true
@@ -124,11 +126,24 @@ function mergeRoll(loot) {
   }
 }
 
-function display() {
+// a fresh single open scatters into random slots like the game fills a
+// chest; accumulated piles sort biggest first instead. stacks past the
+// slot count drop off the display (the counter still includes them)
+function display(scatter = false) {
   const cap = state.kind.cols * state.kind.rows
-  const sorted = [...pile].sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
-  state.stacks = sorted.slice(0, cap).map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
+  if (scatter && pile.length <= cap) {
+    const slots = [...Array(cap).keys()]
+    for (let i = slots.length - 1; i > 0; i--) {
+      const j = Math.random() * (i + 1) | 0
+      ;[slots[i], slots[j]] = [slots[j], slots[i]]
+    }
+    state.stacks = pile.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: slots[i] }))
+  } else {
+    const sorted = [...pile].sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
+    state.stacks = sorted.slice(0, cap).map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
+  }
   state.pileTotal = pile.reduce((a, s) => a + s.count, 0)
+  state.hiddenStacks = Math.max(0, pile.length - cap)
 }
 
 async function reroll() {
@@ -136,7 +151,7 @@ async function reroll() {
   pile = []
   mergeRoll(await rollLoot(state.table))
   state.rolls = 1
-  display()
+  display(true)
 }
 
 async function addRoll(n = 1) {
