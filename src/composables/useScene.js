@@ -16,7 +16,11 @@ const view = reactive({
 
 let renderer = null, canvas = null
 const scene = new THREE.Scene()
-const perspCam = new THREE.PerspectiveCamera(FOV, 1, 0.1, 5000)
+// near 2 (1/8 block): depth precision scales with the near plane, and 0.1
+// left far surfaces quantising to the same depth value (distant z-fighting,
+// faces poking through each other). walking can't get closer than ~4 units
+// to a surface, so nothing visible ever clips
+const perspCam = new THREE.PerspectiveCamera(FOV, 1, 2, 5000)
 perspCam.position.set(60, 45, 60)
 const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 5000)
 let camera = perspCam
