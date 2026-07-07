@@ -202,7 +202,12 @@ watch(() => [state.open, state.stacks, state.gui], () => {
             </div>
             <div v-if="state.poolId" class="pool-card">
               <div class="ph">
-                <span class="fl">Template pool</span>
+                <span class="fl phl">
+                  <button v-if="state.poolStack.length" class="pback" title="Back to previous pool" @click="container.poolBack()">
+                    <span class="material-symbols-outlined">arrow_back</span>
+                  </button>
+                  {{ state.poolStack.length ? "Fallback pool" : "Template pool" }}
+                </span>
                 <span class="pid">{{ state.poolId }}</span>
               </div>
               <div v-for="(p, i) in state.poolEntries ?? []" :key="i" class="pe"
@@ -212,7 +217,11 @@ watch(() => [state.open, state.stacks, state.gui], () => {
                 <span class="meter"><i :style="{ width: Math.max(p.pct, 1.5) + '%' }"></i></span>
                 <span class="pctv">{{ p.pct >= 99.95 ? "100" : p.pct.toFixed(1) }}%</span>
               </div>
-              <div v-if="state.poolFallback" class="pfb">fallback pool: {{ state.poolFallback }}</div>
+              <div v-if="state.poolFallback" class="pfb clickable" title="View the fallback pool"
+                @click="container.openFallbackPool()">
+                fallback pool: <span class="mono-nm">{{ state.poolFallback }}</span>
+                <span class="material-symbols-outlined pfb-arrow">chevron_right</span>
+              </div>
             </div>
           </div>
 
@@ -457,11 +466,39 @@ button.icon {
 .pool-card .pe .nm { flex: 1; }
 
 .pool-card .pfb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
   color: var(--text-dim);
   font-size: 12px;
 }
+
+.pool-card .pfb.clickable { cursor: pointer; }
+.pool-card .pfb.clickable:hover { background: #ffffff0d; color: var(--text); }
+
+.pfb-arrow {
+  font-size: 16px;
+  margin-left: auto;
+}
+
+.phl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pback {
+  background: transparent;
+  border: none;
+  padding: 0;
+  display: flex;
+  color: var(--text-dim);
+}
+
+.pback:hover { color: var(--text); background: transparent; }
+.pback .material-symbols-outlined { font-size: 16px; }
 
 .pane {
   display: flex;

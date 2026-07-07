@@ -51,9 +51,10 @@ const state = reactive({
   gui: null,       // the gui actually drawn (accumulated piles grow a chest)
   guiTitle: "",
   dataRows: null,  // technical blocks (command/structure/jigsaw) show these
-  poolId: "",      // the jigsaw's template pool
+  poolId: "",      // the pool the card currently shows
   poolEntries: null, // what that pool can place, weighted
-  poolFallback: ""
+  poolFallback: "",
+  poolStack: []    // ids walked through via fallback links, for going back
 })
 
 let openSeq = 0 // bumps per open(): stale async work from a previous container is discarded
@@ -98,9 +99,14 @@ function dataRowsFor(name, p, nbt) {
 }
 
 // what the jigsaw's template pool can place: weighted entries, nested list
-// elements flattened, features and empties shown but not loadable
+// elements flattened, features and empties shown but not loadable. the card
+// navigates: clicking the fallback loads that pool in place
+let poolSeq = 0
 async function loadPoolEntries(poolId) {
-  const seq = openSeq
+  const seq = ++poolSeq, oseq = openSeq
+  state.poolId = stripNs(poolId)
+  state.poolEntries = null
+  state.poolFallback = ""
   try {
     const lib = await loadLibrary()
     const [ns, path] = poolId.includes(":") ? poolId.split(":") : ["minecraft", poolId]
@@ -123,7 +129,7 @@ async function loadPoolEntries(poolId) {
     for (const e of json.elements ?? []) collect(e.element, e.weight ?? 1)
     const total = out.reduce((a, o) => a + o.weight, 0) || 1
     out.sort((a, b) => b.weight - a.weight || a.label.localeCompare(b.label))
-    if (seq !== openSeq || !state.open) return
+    if (seq !== poolSeq || oseq !== openSeq || !state.open) return
     state.poolEntries = out.map(o => ({
       ...o,
       pct: o.weight / total * 100,
@@ -132,6 +138,17 @@ async function loadPoolEntries(poolId) {
     const fb = stripNs(json.fallback ?? "")
     state.poolFallback = fb && fb !== "empty" ? fb : ""
   } catch {}
+}
+
+function openFallbackPool() {
+  if (!state.poolFallback) return
+  state.poolStack.push(state.poolId)
+  loadPoolEntries(state.poolFallback)
+}
+
+function poolBack() {
+  const prev = state.poolStack.pop()
+  if (prev) loadPoolEntries(prev)
 }
 
 async function open(block) {
@@ -145,6 +162,7 @@ async function open(block) {
   state.poolId = ""
   state.poolEntries = null
   state.poolFallback = ""
+  state.poolStack = []
   const bare = stripNs(name)
   if (/(^|_)(command_block|structure_block|jigsaw)$/.test(bare)) {
     state.tableId = ""
@@ -155,10 +173,7 @@ async function open(block) {
     state.dataRows = dataRowsFor(bare, entry?.Properties ?? {}, block.nbt)
     openSeq++
     state.open = true
-    if (bare === "jigsaw" && block.nbt?.pool && stripNs(block.nbt.pool) !== "empty") {
-      state.poolId = stripNs(block.nbt.pool)
-      loadPoolEntries(block.nbt.pool)
-    }
+    if (bare === "jigsaw" && block.nbt?.pool && stripNs(block.nbt.pool) !== "empty") loadPoolEntries(block.nbt.pool)
     return
   }
   state.tableId = (block.nbt?.LootTable ?? "").replace(/^minecraft:/, "")
@@ -352,5 +367,5 @@ function initPicking(canvas) {
 }
 
 export function useContainer() {
-  return { state: readonly(state), open, close, reroll, addRoll, setTab, ensureOdds, initPicking }
+  return { state: readonly(state), open, close, reroll, addRoll, setTab, ensureOdds, openFallbackPool, poolBack, initPicking }
 }
