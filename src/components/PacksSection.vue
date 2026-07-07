@@ -1,8 +1,11 @@
-<script setup>
-import { ref } from "vue"
+﻿<script setup>
+import { computed, ref } from "vue"
 import { usePacks } from "../composables/usePacks.js"
+import { useLock } from "../composables/useLock.js"
 
 const { state, setChannel, addPacks, removePack, movePack } = usePacks()
+const { locked } = useLock()
+const busy = computed(() => state.busy || locked.value)
 const fileInput = ref(null)
 
 function onFiles(e) {
@@ -15,20 +18,20 @@ function onFiles(e) {
   <section>
     <h2>Packs</h2>
     <div class="channel">
-      <button :class="{ active: state.channel === 'release' }" :disabled="state.busy"
+      <button :class="{ active: state.channel === 'release' }" :disabled="busy"
         @click="setChannel('release')">Release</button>
-      <button :class="{ active: state.channel === 'snapshot' }" :disabled="state.busy"
+      <button :class="{ active: state.channel === 'snapshot' }" :disabled="busy"
         @click="setChannel('snapshot')">Snapshot</button>
     </div>
     <div class="pack-list">
       <div v-for="(p, i) in state.packs" :key="p.id" class="pack">
         <span class="material-symbols-outlined kind">folder_zip</span>
         <span class="name" :title="p.name">{{ p.name }}</span>
-        <button class="icon" title="Move up" :disabled="state.busy || i === 0"
+        <button class="icon" title="Move up" :disabled="busy || i === 0"
           @click="movePack(p.id, -1)"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
-        <button class="icon" title="Move down" :disabled="state.busy || i === state.packs.length - 1"
+        <button class="icon" title="Move down" :disabled="busy || i === state.packs.length - 1"
           @click="movePack(p.id, 1)"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
-        <button class="icon" title="Remove" :disabled="state.busy"
+        <button class="icon" title="Remove" :disabled="busy"
           @click="removePack(p.id)"><span class="material-symbols-outlined">close</span></button>
       </div>
       <div class="pack base" :class="{ failed: state.baseFailed }">
@@ -36,7 +39,7 @@ function onFiles(e) {
         <span class="name">{{ state.baseId ? `Vanilla ${state.baseId}` : state.baseStatus }}</span>
       </div>
     </div>
-    <button class="add" :disabled="state.busy" @click="fileInput.click()">
+    <button class="add" :disabled="busy" @click="fileInput.click()">
       <span class="material-symbols-outlined">add</span>
       Add Resource Pack or Mod
     </button>

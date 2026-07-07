@@ -167,9 +167,32 @@ and correct .js/.zip MIME types works).
   and back, closed door blocks at its panel face and opens to walk through,
   exit restores FOV 45 + OrbitControls with a valid target. Console clean.
 
-## Next steps
+- Build step 10 (polish + docs) DONE:
+  - Locking (DECISIONS 17) now covers pack ops: usePacks holds the global lock
+    through loadBase/setChannel/addPacks/removePack/movePack and refuses to
+    start while something else holds it; PacksSection buttons disable on
+    busy OR locked. Verified mid-solve: pack buttons disabled, menu locked.
+  - ?seed/?level are captured once at startup (loads rewrite the query string)
+    and any load clears them from the URL, so a stale seed can't leak into a
+    manually clicked structure's session.
+  - README.md written (features, dev setup incl. the 8080 library server +
+    VITE_LIB_URL, URL params).
+  - Full Playwright regression on a fresh page: URL village session, levels,
+    lock coverage during solve, collect village+igloo, 2.5MB glb export of the
+    collected scene, clear, walk enter/exit (FOV 78/45), wireframe override,
+    ortho toggle. Console clean.
 
-1. Build order step 10 (polish + final docs) per PLAN.md.
+## THE REBUILD IS COMPLETE (all 10 build-order steps)
+
+Remaining open questions from DECISIONS 18, resolved as follows unless Ewan
+says otherwise:
+- Pack change DOES auto-rebuild the current structure/session in place (rebase
+  keeps level + seed); revisit if multi-pack editing makes it feel heavy.
+- Info tooltip: none yet; the info chip shows the stats inline. easy-tooltips
+  not pulled in.
+- Samples: dropped (no bundled .nbt samples; Open Structure File covers it).
+- Entity NBT still rides along through combine (only final_state/metadata
+  consumed).
 3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
    pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 

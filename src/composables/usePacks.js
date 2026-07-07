@@ -1,6 +1,7 @@
 import { reactive, shallowRef, readonly } from "vue"
 import { loadLibrary } from "../lib.js"
 import { loadMojangJar } from "../mojang.js"
+import { useLock } from "./useLock.js"
 
 // Ordered pack overlay: user packs (index 0 = highest priority) over the
 // vanilla base jar. Maps directly onto prepareAssets source order (first wins).
@@ -21,6 +22,7 @@ const state = reactive({
 })
 
 const assets = shallowRef(null)
+const { lock, locked } = useLock()
 
 // default swap used when an action isn't given one explicitly: the app
 // registers "rebuild the current scene with the new assets" here
@@ -49,8 +51,11 @@ async function rebuildAssets(swap) {
   }
 }
 
+// pack ops hold the global lock too: nothing else may start a load while the
+// asset bundle is being replaced
 async function loadBase(swap) {
   state.busy = true
+  lock(true)
   state.baseFailed = false
   try {
     const mb = n => (n / 1048576).toFixed(0)
@@ -71,19 +76,21 @@ async function loadBase(swap) {
     await rebuildAssets(swap)
   } finally {
     state.busy = false
+    lock(false)
   }
 }
 
 async function setChannel(channel, swap) {
-  if (state.busy || channel === state.channel) return
+  if (state.busy || locked.value || channel === state.channel) return
   state.channel = channel
   setChannelParam(channel)
   await loadBase(swap)
 }
 
 async function addPacks(files, swap) {
-  if (state.busy || !files.length) return
+  if (state.busy || locked.value || !files.length) return
   state.busy = true
+  lock(true)
   try {
     const added = []
     for (const file of files) {
@@ -95,35 +102,40 @@ async function addPacks(files, swap) {
     await rebuildAssets(swap)
   } finally {
     state.busy = false
+    lock(false)
   }
 }
 
 async function removePack(id, swap) {
-  if (state.busy) return
+  if (state.busy || locked.value) return
   const i = state.packs.findIndex(p => p.id === id)
   if (i < 0) return
   state.busy = true
+  lock(true)
   try {
     state.packs.splice(i, 1)
     bytesById.delete(id)
     await rebuildAssets(swap)
   } finally {
     state.busy = false
+    lock(false)
   }
 }
 
 async function movePack(id, delta, swap) {
-  if (state.busy) return
+  if (state.busy || locked.value) return
   const i = state.packs.findIndex(p => p.id === id)
   const j = i + delta
   if (i < 0 || j < 0 || j >= state.packs.length) return
   state.busy = true
+  lock(true)
   try {
     const [p] = state.packs.splice(i, 1)
     state.packs.splice(j, 0, p)
     await rebuildAssets(swap)
   } finally {
     state.busy = false
+    lock(false)
   }
 }
 

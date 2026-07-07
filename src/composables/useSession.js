@@ -42,7 +42,19 @@ const state = reactive({
 
 let base = null, baseName = null
 let prevAnchorWorld = null
-let urlAdopted = false
+
+// ?seed/?level are adopted by the FIRST session only (the initial ?vanilla
+// load); captured up front because loads rewrite the query string
+let urlSeed = null, urlLevel = null
+{
+  const sp = new URLSearchParams(location.search)
+  const hex = sp.get("seed")
+  if (hex && /^[0-9a-f]{1,8}$/i.test(hex)) {
+    urlSeed = parseInt(hex, 16) >>> 0
+    const lvl = parseInt(sp.get("level"))
+    urlLevel = Number.isFinite(lvl) ? lvl : 2
+  }
+}
 
 const rand32 = () => (Math.random() * 0x100000000) >>> 0
 const nsSplit = ref => {
@@ -195,19 +207,12 @@ async function startSession(structure, name) {
   const root = buildApi.getRoot()
   if (root) prevAnchorWorld = root.position.clone()
 
-  if (!urlAdopted) {
-    urlAdopted = true
-    const sp = new URLSearchParams(location.search)
-    const seedHex = sp.get("seed")
-    if (seedHex && /^[0-9a-f]{1,8}$/i.test(seedHex)) {
-      state.seed = parseInt(seedHex, 16) >>> 0
-      if (state.steps) {
-        const lvl = parseInt(sp.get("level"))
-        state.level = Math.max(1, Math.min((Number.isFinite(lvl) ? lvl : 2) - 1, state.maxDepth))
-      } else state.level = state.maxDepth
-      await regenerate()
-      return
-    }
+  if (urlSeed != null) {
+    state.seed = urlSeed
+    state.level = state.steps ? Math.max(1, Math.min(urlLevel - 1, state.maxDepth)) : state.maxDepth
+    urlSeed = urlLevel = null
+    await regenerate()
+    return
   }
   syncUrl()
 }

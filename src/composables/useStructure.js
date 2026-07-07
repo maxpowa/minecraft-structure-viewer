@@ -21,6 +21,9 @@ const state = reactive({ name: "", error: "" })
 const setVanillaParam = rel => {
   const u = new URL(location)
   rel ? u.searchParams.set("vanilla", rel) : u.searchParams.delete("vanilla")
+  // a load resets any level session; its params must not leak to the next one
+  u.searchParams.delete("seed")
+  u.searchParams.delete("level")
   history.replaceState(null, "", u)
 }
 
