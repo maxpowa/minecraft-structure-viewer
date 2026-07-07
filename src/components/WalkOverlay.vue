@@ -43,16 +43,33 @@ function tick() {
     arrow.value = null
     return
   }
-  // yaw/pitch from the real look direction, so any camera works (orbit, ortho,
-  // walk) regardless of its rotation order
-  cam.getWorldDirection(_look)
-  box.getCenter(_v).sub(cam.position).normalize()
-  const dyaw = wrapPi(Math.atan2(-_v.x, -_v.z) - Math.atan2(-_look.x, -_look.z))
-  const dpitch = asin1(_v.y) - asin1(_look.y)
-  let dx = -dyaw, dy = -dpitch // CSS: right = negative yaw delta, down = negative pitch delta
+  const r = canvas.getBoundingClientRect()
+  box.getCenter(_v)
+  let dx, dy
+  if (state.on) {
+    // walking: the yaw/pitch DELTAS needed to face the structure. pitch clamps
+    // at +-90, so a target behind you reads as "turn around" (horizontal),
+    // never as "pitch further" past the clamp. aims at the nearest matching
+    // height: while your head is within the model's Y span the arrow stays
+    // level instead of suggesting it sits higher or lower
+    _v.y = Math.max(box.min.y, Math.min(box.max.y, cam.position.y))
+    _v.sub(cam.position).normalize()
+    cam.getWorldDirection(_look)
+    const dyaw = wrapPi(Math.atan2(-_v.x, -_v.z) - Math.atan2(-_look.x, -_look.z))
+    const dpitch = asin1(_v.y) - asin1(_look.y)
+    dx = -dyaw
+    dy = -dpitch
+  } else {
+    // orbiting: the plain screen-space direction toward the centre ("drag it
+    // back this way"); angular deltas overshoot vertically at steep angles
+    const behind = _v.applyMatrix4(cam.matrixWorldInverse).z > 0
+    _v.applyMatrix4(cam.projectionMatrix)
+    dx = _v.x * r.width
+    dy = -_v.y * r.height
+    if (behind) { dx = -dx; dy = -dy }
+  }
   const n = Math.hypot(dx, dy)
   if (n < 1e-6) { dx = 1; dy = 0 } else { dx /= n; dy /= n }
-  const r = canvas.getBoundingClientRect()
   const t = Math.min((r.width / 2 - 30) / Math.max(Math.abs(dx), 1e-9), (r.height / 2 - 30) / Math.max(Math.abs(dy), 1e-9))
   arrow.value = {
     left: r.left + r.width / 2 + dx * t + "px",
