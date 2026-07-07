@@ -34,7 +34,6 @@ const keys = new Set()
 let collHash = new Map(), floorY = 0
 
 // outline round the interactable currently in reach (block highlight)
-const aimBox = new THREE.Box3()
 let outline = null
 function ensureOutline() {
   outline ??= sceneApi.makeHighlight()
@@ -267,7 +266,7 @@ function updateWalk(dt) {
   // doesn't z-fight); none while a modal has the controls detached
   perspCam.getWorldDirection(_look)
   const aim = state.suspended ? null : buildApi.aimDoor(perspCam.position.x, perspCam.position.y, perspCam.position.z, _look.x, _look.y, _look.z)
-  if (aim) outline.show(aimBox.copy(aim).expandByScalar(0.2))
+  if (aim) outline.show(aim)
   else outline.hide()
 }
 

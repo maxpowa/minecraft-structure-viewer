@@ -119,7 +119,7 @@ function hoverCheck(e, canvas) {
   const box = b && buildApi.boxForBlock(b)
   if (box) {
     hover ??= sceneApi.makeHighlight()
-    hover.show(box.expandByScalar(0.2))
+    hover.show(box)
     canvas.style.cursor = "pointer"
   } else clearHover(canvas)
 }

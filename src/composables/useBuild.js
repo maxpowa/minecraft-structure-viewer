@@ -298,19 +298,45 @@ function interact(ox, oy, oz, dx, dy, dz) {
   return h?.container ?? false
 }
 
-// world-space full-cell (16^3) box of a block (aim + hover highlights)
+// state -> local Box3 of its template (door outlines follow the model)
+let stateBoxCache = new Map()
+function boxForState(idx) {
+  if (stateBoxCache.has(idx)) return stateBoxCache.get(idx)
+  const tmpl = templates.get(idx)
+  let box = null
+  if (tmpl) {
+    tmpl.updateMatrixWorld(true)
+    box = new THREE.Box3().setFromObject(tmpl)
+  }
+  stateBoxCache.set(idx, box)
+  return box
+}
+
+// vanilla interaction shapes for the container set: chests are the 14-wide
+// body without the knob, everything else in the list is a full cube
 function boxForBlock(b) {
   if (!b || !root) return null
-  const cx = b.pos[0] * 16 + root.position.x, cy = b.pos[1] * 16 + root.position.y, cz = b.pos[2] * 16 + root.position.z
-  _aimBox.min.set(cx - 8, cy - 8, cz - 8)
-  _aimBox.max.set(cx + 8, cy + 8, cz + 8)
+  const name = (current.value?.palette[b.state]?.Name || "").replace(/^minecraft:/, "")
+  const s = /chest$/.test(name) ? [1, 0, 1, 15, 14, 15] : [0, 0, 0, 16, 16, 16]
+  const ox = b.pos[0] * 16 + root.position.x - 8
+  const oy = b.pos[1] * 16 + root.position.y - 8
+  const oz = b.pos[2] * 16 + root.position.z - 8
+  _aimBox.min.set(ox + s[0], oy + s[1], oz + s[2])
+  _aimBox.max.set(ox + s[3], oy + s[4], oz + s[5])
   return _aimBox
 }
 
-// full-cell box of the interactable being looked at (in-reach outline)
+// box of the interactable being looked at (in-reach outline)
+const _aimV = new THREE.Vector3()
 function aimDoor(ox, oy, oz, dx, dy, dz) {
   const h = rayHit(ox, oy, oz, dx, dy, dz)
-  return h ? boxForBlock(h.door ? h.door.b : h.container) : null
+  if (!h) return null
+  if (h.container) return boxForBlock(h.container)
+  const b = h.door.b
+  const open = current.value.palette[b.state].Properties.open === "true"
+  const box = boxForState(open ? h.door.openIdx : h.door.closedIdx)
+  if (!box) return null
+  return _aimBox.copy(box).translate(_aimV.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16).add(root.position))
 }
 
 // the raw structure block at a world position (orbit-mode picking)
@@ -386,6 +412,7 @@ async function build(structure = source, refit = true) {
 
     templates = new Map()
     nonSolid = new Set()
+    stateBoxCache = new Map()
     const isPlane = el => el.from[0] === el.to[0] || el.from[1] === el.to[1] || el.from[2] === el.to[2]
     async function template(stateIdx) {
       if (templates.has(stateIdx)) return templates.get(stateIdx)

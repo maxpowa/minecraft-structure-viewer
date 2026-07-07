@@ -102,24 +102,67 @@ async function drawNameTag(spr, label) {
   spr.userData.ready = true
 }
 
-// block highlight: one box whose lines invert whatever is behind them
-// (1 - dst via custom blending), so it reads on any background
+// block highlight: box edges whose lines invert whatever is behind them
+// (1 - dst via custom blending) and always render on top; only the edges of
+// camera-facing faces draw, so the back of the cube never shows through
 function makeHighlight() {
   const box = new THREE.Box3()
-  const h = new THREE.Box3Helper(box, 0xffffff)
-  h.material.transparent = true
-  h.material.blending = THREE.CustomBlending
-  h.material.blendEquation = THREE.AddEquation
-  h.material.blendSrc = THREE.OneMinusDstColorFactor
-  h.material.blendDst = THREE.ZeroFactor
-  h.visible = false
-  scene.add(h)
+  const geo = new THREE.BufferGeometry()
+  const pos = new THREE.BufferAttribute(new Float32Array(12 * 6), 3)
+  pos.setUsage(THREE.DynamicDrawUsage)
+  geo.setAttribute("position", pos)
+  const mat = new THREE.LineBasicMaterial({
+    color: 0xffffff,
+    transparent: true,
+    depthTest: false,
+    depthWrite: false,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneMinusDstColorFactor,
+    blendDst: THREE.ZeroFactor
+  })
+  const lines = new THREE.LineSegments(geo, mat)
+  lines.renderOrder = 999
+  lines.frustumCulled = false
+  lines.visible = false
+  scene.add(lines)
+  // corners are xyz bitmasks; faces are -x,+x,-y,+y,-z,+z. an edge draws
+  // when either of its two adjacent faces looks at the camera: that keeps
+  // the front + silhouette edges and drops the back ones
+  const EDGES = [
+    [0, 1, 2, 4], [2, 3, 3, 4], [4, 5, 2, 5], [6, 7, 3, 5],
+    [0, 2, 0, 4], [1, 3, 1, 4], [4, 6, 0, 5], [5, 7, 1, 5],
+    [0, 4, 0, 2], [1, 5, 1, 2], [2, 6, 0, 3], [3, 7, 1, 3]
+  ]
+  lines.onBeforeRender = (renderer, sc, cam) => {
+    const vis = []
+    for (let f = 0; f < 6; f++) {
+      const axis = f >> 1, sign = f & 1 ? 1 : -1
+      const plane = sign > 0 ? box.max.getComponent(axis) : box.min.getComponent(axis)
+      vis[f] = sign * (cam.position.getComponent(axis) - plane) > 0
+    }
+    const a = pos.array
+    let n = 0
+    const put = ci => {
+      a[n++] = ci & 1 ? box.max.x : box.min.x
+      a[n++] = ci & 2 ? box.max.y : box.min.y
+      a[n++] = ci & 4 ? box.max.z : box.min.z
+    }
+    for (const [c1, c2, f1, f2] of EDGES) {
+      if (vis[f1] || vis[f2]) {
+        put(c1)
+        put(c2)
+      }
+    }
+    geo.setDrawRange(0, n / 3)
+    pos.needsUpdate = true
+  }
   return {
     show(b) {
       box.copy(b)
-      h.visible = true
+      lines.visible = true
     },
-    hide() { h.visible = false }
+    hide() { lines.visible = false }
   }
 }
 
