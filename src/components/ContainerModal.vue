@@ -5,7 +5,8 @@ import { usePacks } from "../composables/usePacks.js"
 import { useContainer } from "../composables/useContainer.js"
 import { useWalk } from "../composables/useWalk.js"
 import { getFont, measure, drawText } from "../mcfont.js"
-import { describeTable } from "../loot.js"
+import { describeTable, prettyName } from "../loot.js"
+import ItemIcon from "./ItemIcon.vue"
 
 const packs = usePacks()
 const container = useContainer()
@@ -16,7 +17,42 @@ const itemsEl = ref(null)
 const rendering = ref(false)
 const S = 3
 
+const TABS = [
+  { id: "loot", label: "Chest" },
+  { id: "odds", label: "All Items" },
+  { id: "sim", label: "Simulate" },
+  { id: "rules", label: "Rules" }
+]
+
 const rules = computed(() => state.table ? describeTable(state.table) : [])
+
+// simulate view: accumulated stacks ordered by measured commonness, then name
+const oddsIndex = computed(() => new Map((state.odds ?? []).map((o, i) => [o.id + "|" + JSON.stringify(o.components ?? null), i])))
+const simSorted = computed(() => [...state.simStacks].sort((a, b) => {
+  const ia = oddsIndex.value.get(a.key) ?? Infinity
+  const ib = oddsIndex.value.get(b.key) ?? Infinity
+  return ia - ib || stackName(a).localeCompare(stackName(b))
+}))
+const simTotal = computed(() => state.simStacks.reduce((a, s) => a + s.count, 0))
+
+function stackName(s) {
+  let n = prettyName(s.id)
+  const pot = s.components?.["minecraft:potion_contents"]?.potion
+  if (pot) n += " (" + prettyName(pot) + ")"
+  return n
+}
+
+function fmtPct(c) {
+  const p = c * 100
+  if (p >= 99.95) return "100%"
+  if (p < 0.1) return "<0.1%"
+  return p.toFixed(1).replace(/\.0$/, "") + "%"
+}
+
+const fmtAvg = v => String(Math.round(v * 10) / 10)
+
+// "how many you'd get" column: exact count, or the range with its average
+const fmtCount = o => o.min === o.max ? "×" + o.min : `×${o.min}-${o.max} · avg ${fmtAvg(o.avg)}`
 
 function close() {
   container.close()
@@ -123,27 +159,76 @@ watch(() => [state.open, state.stacks], () => {
       </header>
       <div v-if="state.error" class="err">{{ state.error }}</div>
       <template v-else>
-        <div class="gui">
-          <canvas ref="bgEl"></canvas>
-          <canvas ref="itemsEl" class="items"></canvas>
-        </div>
-        <div class="actions">
-          <button :disabled="rendering" @click="container.reroll()">
-            <span class="material-symbols-outlined">shuffle</span>
-            Re-roll
-          </button>
-        </div>
-        <div class="rules">
-          <div v-for="(pool, pi) in rules" :key="pi" class="pool">
-            <div class="pool-head">
-              Pool {{ pi + 1 }} · {{ pool.rolls }} roll{{ pool.rolls === "1" ? "" : "s" }}<template v-if="pool.bonus"> (+{{ pool.bonus }} bonus)</template><template v-if="pool.chance"> · {{ pool.chance }}</template>
+        <nav class="tabs">
+          <button v-for="t in TABS" :key="t.id" :class="{ active: state.tab === t.id }"
+            @click="container.setTab(t.id)">{{ t.label }}</button>
+        </nav>
+        <div class="body">
+
+          <div v-show="state.tab === 'loot'" class="pane loot">
+            <div class="gui">
+              <canvas ref="bgEl"></canvas>
+              <canvas ref="itemsEl" class="items"></canvas>
             </div>
-            <div v-for="(en, ei) in pool.entries" :key="ei" class="entry">
-              <span class="pct">{{ en.pct }}%</span>
-              <span class="nm">{{ en.name }}<span v-if="en.note" class="note"> · {{ en.note }}</span></span>
-              <span class="cnt">{{ en.count ? "×" + en.count : "" }}</span>
+            <div class="actions">
+              <button :disabled="rendering" @click="container.reroll()">
+                <span class="material-symbols-outlined">shuffle</span>
+                Re-roll
+              </button>
             </div>
           </div>
+
+          <div v-if="state.tab === 'odds'" class="pane">
+            <div v-if="state.oddsBusy" class="empty">Measuring drop rates over 10,000 opens…</div>
+            <div v-else-if="state.odds && !state.odds.length" class="empty">This table never drops anything.</div>
+            <template v-else-if="state.odds">
+              <div class="cols"><span class="nm">Item · most common first</span><span class="chance-h">Chance</span><span class="cnt-h">Amount</span></div>
+              <div v-for="o in state.odds" :key="o.id + JSON.stringify(o.components ?? null)" class="item-row">
+                <ItemIcon :id="o.id" :components="o.components" :size="28" />
+                <span class="nm" :title="stackName(o)">{{ stackName(o) }}</span>
+                <span class="meter"><i :style="{ width: Math.max(o.chance * 100, 1.5) + '%' }"></i></span>
+                <span class="pctv">{{ fmtPct(o.chance) }}</span>
+                <span class="cntv">{{ fmtCount(o) }}</span>
+              </div>
+            </template>
+          </div>
+
+          <div v-if="state.tab === 'sim'" class="pane">
+            <div class="sim-bar">
+              <button class="primary" @click="container.simRoll()">
+                <span class="material-symbols-outlined">casino</span>
+                Roll
+              </button>
+              <span class="sim-stats" v-if="state.simRolls">
+                {{ state.simRolls }} {{ state.simRolls === 1 ? "open" : "opens" }} · {{ simTotal }} item{{ simTotal === 1 ? "" : "s" }}
+              </span>
+              <span class="sim-stats" v-else>Each roll opens the container again and adds to the pile.</span>
+              <button class="icon push" title="Reset" :disabled="!state.simRolls" @click="container.simReset()">
+                <span class="material-symbols-outlined">restart_alt</span>
+              </button>
+            </div>
+            <div v-if="state.simRolls && !state.simStacks.length" class="empty">Nothing yet. Unlucky!</div>
+            <div v-for="s in simSorted" :key="s.key" class="item-row">
+              <ItemIcon :id="s.id" :components="s.components" :size="28" />
+              <span class="nm" :title="stackName(s)">{{ stackName(s) }}</span>
+              <span class="cntv big">×{{ s.count }}</span>
+            </div>
+          </div>
+
+          <div v-if="state.tab === 'rules'" class="pane rules">
+            <div v-for="(pool, pi) in rules" :key="pi" class="pool">
+              <div class="pool-head">
+                Pool {{ pi + 1 }} · {{ pool.rolls }} roll{{ pool.rolls === "1" ? "" : "s" }}<template v-if="pool.bonus"> (+{{ pool.bonus }} bonus)</template><template v-if="pool.chance"> · {{ pool.chance }}</template>
+              </div>
+              <div v-for="(en, ei) in pool.entries" :key="ei" class="entry">
+                <span class="meter"><i :style="{ width: Math.max(en.pct, 1.5) + '%' }"></i></span>
+                <span class="pctv">{{ en.pct }}%</span>
+                <span class="nm">{{ en.name }}<span v-if="en.note" class="note"> · {{ en.note }}</span></span>
+                <span class="cnt">{{ en.count ? "×" + en.count : "" }}</span>
+              </div>
+            </div>
+          </div>
+
         </div>
       </template>
     </div>
@@ -164,14 +249,14 @@ watch(() => [state.open, state.stacks], () => {
 .ct-panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 14px;
   max-height: 88vh;
-  overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-width: 380px;
+  width: 584px;
+  max-width: calc(100vw - 32px);
 }
 
 header {
@@ -199,6 +284,53 @@ button.icon {
   padding: 4px;
 }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.tabs button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 0;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.tabs button:hover:not(.active) {
+  background: #ffffff0a;
+  color: var(--text);
+}
+
+.tabs button.active {
+  background: var(--panel-2);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.body {
+  overflow: auto;
+  min-height: 280px;
+  scrollbar-gutter: stable;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.pane.loot {
+  gap: 12px;
+  padding-top: 6px;
+}
+
 .gui {
   position: relative;
   width: fit-content;
@@ -217,44 +349,138 @@ button.icon {
   justify-content: center;
 }
 
-.actions button {
+.actions button, .sim-bar button {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.actions .material-symbols-outlined { font-size: 18px; }
+.actions .material-symbols-outlined, .sim-bar .material-symbols-outlined { font-size: 18px; }
 
 .err { color: var(--red); font-size: 13px; }
 
-.rules {
-  font-size: 12px;
+.empty {
+  color: var(--text-dim);
+  font-size: 13px;
+  padding: 24px 0;
+  text-align: center;
+}
+
+/* shared item rows (odds + simulate) */
+.cols {
   display: flex;
-  flex-direction: column;
   gap: 10px;
+  padding: 2px 6px 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.cols .chance-h { width: 118px; text-align: right; flex-shrink: 0; }
+.cols .cnt-h { width: 104px; text-align: right; flex-shrink: 0; }
+
+.item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+
+.item-row:nth-child(even) { background: #ffffff06; }
+.item-row:hover { background: #ffffff0d; }
+
+.nm {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note { opacity: 0.7; }
+
+.meter {
+  width: 64px;
+  height: 6px;
+  border-radius: 3px;
+  background: #ffffff14;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+}
+
+.pctv {
+  width: 48px;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.cntv {
+  width: 104px;
+  text-align: right;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.cntv.big {
+  width: auto;
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* simulate toolbar */
+.sim-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.sim-stats {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.sim-bar .push { margin-left: auto; }
+
+/* rules */
+.rules { gap: 10px; }
+
+.pool {
+  background: #ffffff05;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
 }
 
 .pool-head {
-  color: var(--text);
   font-weight: 600;
-  margin-bottom: 4px;
+  font-size: 12px;
+  margin-bottom: 6px;
 }
 
 .entry {
   display: flex;
+  align-items: center;
   gap: 8px;
-  padding: 1px 0;
+  padding: 2px 0;
   color: var(--text-dim);
   font-family: ui-monospace, monospace;
+  font-size: 12px;
 }
 
-.pct {
-  width: 48px;
-  text-align: right;
-  flex-shrink: 0;
-}
-
-.nm { flex: 1; }
-.note { opacity: 0.7; }
-.cnt { flex-shrink: 0; }
+.entry .nm { flex: 1; }
+.entry .cnt { flex-shrink: 0; }
 </style>

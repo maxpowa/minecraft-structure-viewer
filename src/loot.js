@@ -10,8 +10,24 @@ const packs = usePacks()
 
 const strip = s => typeof s === "string" ? s.replace(/^minecraft:/, "") : s
 
-export async function readLootTable(id) {
-  if (!id) return null
+export const prettyName = n => strip(n).replace(/_/g, " ").replace(/(^|\s)[a-z]/g, c => c.toUpperCase())
+
+// tables are static per pack set, so cache the parsed JSON (sampling opens a
+// table thousands of times); the cache drops whenever the packs change
+const tableCache = new Map()
+let tableCacheVersion = -1
+
+export function readLootTable(id) {
+  if (!id) return Promise.resolve(null)
+  if (packs.state.assetsVersion !== tableCacheVersion) {
+    tableCacheVersion = packs.state.assetsVersion
+    tableCache.clear()
+  }
+  if (!tableCache.has(id)) tableCache.set(id, readLootTableRaw(id))
+  return tableCache.get(id)
+}
+
+async function readLootTableRaw(id) {
   const lib = await loadLibrary()
   const assets = packs.assets.value
   const [ns, path] = id.includes(":") ? id.split(":") : ["minecraft", id]
@@ -101,6 +117,40 @@ export async function rollLoot(table) {
   const out = []
   await rollInto(table, out)
   return out.filter(s => s.id)
+}
+
+export const stackKey = s => s.id + "|" + JSON.stringify(s.components ?? null)
+
+// what can this table drop, and how often? measured by opening it `opens`
+// times with the real roller, so nested tables, alternatives, binomial
+// rolls and conditions all count for exactly what they do in a real roll.
+// -> [{ id, components, chance, avg, min, max }] sorted most common first
+export async function sampleTable(table, opens = 10000) {
+  const tally = new Map()
+  const perOpen = new Map()
+  for (let i = 0; i < opens; i++) {
+    perOpen.clear()
+    for (const s of await rollLoot(table)) {
+      const k = stackKey(s)
+      perOpen.set(k, (perOpen.get(k) ?? 0) + s.count)
+      if (!tally.has(k)) tally.set(k, { id: s.id, components: s.components, hits: 0, total: 0, min: Infinity, max: 0 })
+    }
+    for (const [k, count] of perOpen) {
+      const t = tally.get(k)
+      t.hits++
+      t.total += count
+      t.min = Math.min(t.min, count)
+      t.max = Math.max(t.max, count)
+    }
+  }
+  return [...tally.values()].map(t => ({
+    id: t.id,
+    components: t.components,
+    chance: t.hits / opens,   // odds an open contains it at all
+    avg: t.total / t.hits,    // how many you get when it drops
+    min: t.min,
+    max: t.max
+  })).sort((a, b) => b.chance - a.chance || strip(a.id).localeCompare(strip(b.id)))
 }
 
 function fmtNum(n) {

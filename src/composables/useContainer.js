@@ -2,7 +2,7 @@ import { reactive, readonly } from "vue"
 import * as THREE from "three"
 import { useScene } from "./useScene.js"
 import { useBuild } from "./useBuild.js"
-import { readLootTable, rollLoot } from "../loot.js"
+import { readLootTable, rollLoot, sampleTable, stackKey, prettyName } from "../loot.js"
 
 // Clicking a loot container (chest, barrel, dispenser...) opens a modal with
 // its loot table rules and a rolled inventory rendered in the vanilla GUI.
@@ -28,8 +28,6 @@ function kindOf(name) {
   return KINDS.generic
 }
 
-const pretty = n => n.replace(/^minecraft:/, "").replace(/_/g, " ").replace(/(^|\s)[a-z]/g, c => c.toUpperCase())
-
 const state = reactive({
   open: false,
   blockName: "",
@@ -37,18 +35,31 @@ const state = reactive({
   table: null,
   kind: null,
   stacks: [],
-  error: ""
+  error: "",
+  tab: "loot",     // loot | odds | sim | rules
+  odds: null,      // sampleTable result, computed once per open on demand
+  oddsBusy: false,
+  simRolls: 0,
+  simStacks: []    // accumulated { key, id, components, count }
 })
+
+let openSeq = 0 // bumps per open(): stale async work from a previous container is discarded
 
 async function open(block) {
   const entry = buildApi.current.value?.palette[block.state]
   const name = entry?.Name ?? "minecraft:chest"
   state.error = ""
-  state.blockName = pretty(name)
+  state.blockName = prettyName(name)
   state.kind = kindOf(name)
   state.tableId = (block.nbt?.LootTable ?? "").replace(/^minecraft:/, "")
   state.table = null
   state.stacks = []
+  state.tab = "loot"
+  state.odds = null
+  state.oddsBusy = false
+  state.simRolls = 0
+  state.simStacks = []
+  openSeq++
   state.open = true
   try {
     const table = await readLootTable(block.nbt?.LootTable)
@@ -61,6 +72,45 @@ async function open(block) {
   } catch (err) {
     state.error = String(err)
   }
+}
+
+// the odds and sim views need the measured drop rates; compute them once
+// per open, in the background, the first time either tab wants them
+async function ensureOdds() {
+  if (!state.table || state.odds || state.oddsBusy) return
+  const seq = openSeq
+  state.oddsBusy = true
+  try {
+    const odds = await sampleTable(state.table)
+    if (seq === openSeq) state.odds = odds
+  } finally {
+    if (seq === openSeq) state.oddsBusy = false
+  }
+}
+
+function setTab(tab) {
+  state.tab = tab
+  if (tab === "odds" || tab === "sim") ensureOdds()
+}
+
+// one more simulated open, merged into the running totals
+async function simRoll() {
+  if (!state.table) return
+  const seq = openSeq
+  const loot = await rollLoot(state.table)
+  if (seq !== openSeq || !state.open) return // a different container opened meanwhile
+  state.simRolls++
+  for (const s of loot) {
+    const k = stackKey(s)
+    const ex = state.simStacks.find(t => t.key === k)
+    if (ex) ex.count += s.count
+    else state.simStacks.push({ key: k, id: s.id, components: s.components, count: s.count })
+  }
+}
+
+function simReset() {
+  state.simRolls = 0
+  state.simStacks = []
 }
 
 async function reroll() {
@@ -155,5 +205,5 @@ function initPicking(canvas) {
 }
 
 export function useContainer() {
-  return { state: readonly(state), open, close, reroll, initPicking }
+  return { state: readonly(state), open, close, reroll, setTab, ensureOdds, simRoll, simReset, initPicking }
 }
