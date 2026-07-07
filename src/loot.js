@@ -14,6 +14,11 @@ const strip = s => typeof s === "string" ? s.replace(/^minecraft:/, "") : s
 export const isContainer = name =>
   /(^|_)(chest|barrel|shulker_box|dispenser|dropper|hopper)$/.test((name || "").replace(/^minecraft:/, ""))
 
+// blocks the modal can inspect: containers plus the technical blocks whose
+// nbt is worth reading
+export const isInspectable = name =>
+  isContainer(name) || /(^|_)(command_block|structure_block|jigsaw)$/.test((name || "").replace(/^minecraft:/, ""))
+
 export const prettyName = n => strip(n).replace(/_/g, " ").replace(/(^|\s)[a-z]/g, c => c.toUpperCase())
 
 // tables are static per pack set, so cache the parsed JSON (sampling opens a

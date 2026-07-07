@@ -2,7 +2,7 @@ import { reactive, readonly } from "vue"
 import * as THREE from "three"
 import { useScene } from "./useScene.js"
 import { useBuild } from "./useBuild.js"
-import { readLootTable, rollLoot, sampleTable, stackKey, prettyName, isContainer } from "../loot.js"
+import { readLootTable, rollLoot, sampleTable, stackKey, prettyName, isInspectable } from "../loot.js"
 
 // Clicking a loot container (chest, barrel, dispenser...) opens a modal with
 // its loot table rules and a rolled inventory rendered in the vanilla GUI.
@@ -44,10 +44,51 @@ const state = reactive({
   rolls: 0,        // opens accumulated into the gui pile
   pileTotal: 0,
   gui: null,       // the gui actually drawn (accumulated piles grow a chest)
-  guiTitle: ""
+  guiTitle: "",
+  dataRows: null   // technical blocks (command/structure/jigsaw) show these
 })
 
 let openSeq = 0 // bumps per open(): stale async work from a previous container is discarded
+
+const stripNs = s => typeof s === "string" ? s.replace(/^minecraft:/, "") : s
+
+// technical block nbt as readable label/value rows
+function dataRowsFor(name, p, nbt) {
+  const rows = []
+  const add = (label, value, mono = false) => {
+    if (value === undefined || value === null || value === "") return
+    rows.push({ label, value: String(value), mono })
+  }
+  if (name.endsWith("command_block")) {
+    add("Type", name === "chain_command_block" ? "Chain" : name === "repeating_command_block" ? "Repeating" : "Impulse")
+    add("Command", nbt?.Command || "(empty)", true)
+    add("Conditional", p.conditional === "true" ? "Yes" : "No")
+    add("Behaviour", nbt?.auto ? "Always Active" : "Needs Redstone")
+  } else if (name === "structure_block") {
+    add("Mode", stripNs(nbt?.mode ?? p.mode ?? "").toUpperCase())
+    add("Structure", stripNs(nbt?.name), true)
+    if (nbt && [nbt.posX, nbt.posY, nbt.posZ].some(v => v)) add("Offset", `${nbt.posX ?? 0}, ${nbt.posY ?? 0}, ${nbt.posZ ?? 0}`, true)
+    if (nbt && [nbt.sizeX, nbt.sizeY, nbt.sizeZ].some(v => v)) add("Size", `${nbt.sizeX ?? 0} × ${nbt.sizeY ?? 0} × ${nbt.sizeZ ?? 0}`, true)
+    if (nbt?.rotation && nbt.rotation !== "NONE") add("Rotation", nbt.rotation)
+    if (nbt?.mirror && nbt.mirror !== "NONE") add("Mirror", nbt.mirror)
+    if (nbt?.integrity != null && nbt.integrity !== 1) {
+      add("Integrity", nbt.integrity)
+      add("Seed", nbt.seed)
+    }
+    add("Metadata", nbt?.metadata, true)
+    if (nbt?.ignoreEntities != null) add("Entities", nbt.ignoreEntities ? "Ignored" : "Included")
+  } else if (name === "jigsaw") {
+    add("Pool", stripNs(nbt?.pool), true)
+    add("Name", stripNs(nbt?.name), true)
+    add("Target", stripNs(nbt?.target), true)
+    add("Turns into", stripNs(nbt?.final_state), true)
+    add("Joint", nbt?.joint)
+    add("Orientation", p.orientation, true)
+    if (nbt?.selection_priority) add("Selection priority", nbt.selection_priority)
+    if (nbt?.placement_priority) add("Placement priority", nbt.placement_priority)
+  }
+  return rows.length ? rows : [{ label: "Data", value: "(none)" }]
+}
 
 async function open(block) {
   const entry = buildApi.current.value?.palette[block.state]
@@ -56,6 +97,19 @@ async function open(block) {
   state.note = ""
   state.blockName = prettyName(name)
   state.kind = kindOf(name)
+  state.dataRows = null
+  const bare = stripNs(name)
+  if (/(^|_)(command_block|structure_block|jigsaw)$/.test(bare)) {
+    state.tableId = ""
+    state.table = null
+    state.stacks = []
+    state.gui = null
+    state.guiTitle = ""
+    state.dataRows = dataRowsFor(bare, entry?.Properties ?? {}, block.nbt)
+    openSeq++
+    state.open = true
+    return
+  }
   state.tableId = (block.nbt?.LootTable ?? "").replace(/^minecraft:/, "")
   state.table = null
   state.stacks = []
@@ -196,7 +250,7 @@ function containerUnder(e, canvas) {
   const b = buildApi.blockEntryAt(p.x, p.y, p.z)
   if (!b) return null
   const name = buildApi.current.value?.palette[b.state]?.Name
-  return isContainer(name) || b.nbt?.LootTable ? b : null
+  return isInspectable(name) || b.nbt?.LootTable ? b : null
 }
 
 function clearHover(canvas) {

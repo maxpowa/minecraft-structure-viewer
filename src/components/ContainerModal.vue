@@ -17,7 +17,7 @@ const itemsEl = ref(null)
 const rendering = ref(false)
 const S = 3
 
-const TABS = computed(() => state.table
+const TABS = computed(() => state.dataRows ? [] : state.table
   ? [
     { id: "loot", label: "Chest" },
     { id: "list", label: "List" },
@@ -171,9 +171,16 @@ watch(() => [state.open, state.stacks, state.gui], () => {
           <button v-for="t in TABS" :key="t.id" :class="{ active: state.tab === t.id }"
             @click="container.setTab(t.id)">{{ t.label }}</button>
         </nav>
-        <div class="body">
+        <div class="body" :class="{ compact: state.dataRows }">
 
-          <div v-show="state.tab === 'loot'" class="pane loot">
+          <div v-if="state.dataRows" class="pane data">
+            <div v-for="r in state.dataRows" :key="r.label" class="data-row">
+              <span class="dl">{{ r.label }}</span>
+              <span class="dv" :class="{ mono: r.mono }">{{ r.value }}</span>
+            </div>
+          </div>
+
+          <div v-show="state.tab === 'loot' && !state.dataRows" class="pane loot">
             <div class="gui">
               <canvas ref="bgEl"></canvas>
               <canvas ref="itemsEl" class="items"></canvas>
@@ -326,6 +333,37 @@ button.icon {
 .body {
   overflow: auto;
   min-height: 280px;
+}
+
+.body.compact { min-height: 0; }
+
+.data { gap: 4px; }
+
+.data-row {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  align-items: baseline;
+}
+
+.data-row:nth-child(even) { background: #ffffff06; }
+
+.dl {
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+.dv {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.dv.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
 }
 
 .pane {
