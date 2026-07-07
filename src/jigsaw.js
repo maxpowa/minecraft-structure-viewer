@@ -24,8 +24,15 @@ export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, max
   const pieces = [startPiece]
   const boxes = [startPiece.box]
   let frontier = [startPiece]
+  let exhausted = false
 
-  for (let d = 0; d < maxDepth && frontier.length && pieces.length < maxPieces; d++) {
+  // one iteration past maxDepth is a look-ahead: it answers "is there anything
+  // left to process" (a piece's jigsaws can all be dead ends: empty pools,
+  // nothing fits) and is rolled back, so the menu can stop AT the last real
+  // level instead of discovering it one step late
+  for (let d = 0; d <= maxDepth && frontier.length && pieces.length < maxPieces; d++) {
+    const probe = d === maxDepth
+    const mark = probe && { pieces: pieces.length, boxes: boxes.length, plots: frontier.map(f => f.onPlot.length) }
     const rand = rnd(levelSeed(d + 1))
     const next = []
     for (const src of frontier) {
@@ -75,15 +82,32 @@ export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, max
               if (attachInside) src.onPlot.push(box)
               else boxes.push(box)
               next.push(piece)
-              onProgress?.(pieces.length)
+              if (!probe) onProgress?.(pieces.length)
               break jig
             }
           }
         }
       }
     }
-    if (!next.length) break
+    if (probe) {
+      exhausted = !next.length
+      pieces.length = mark.pieces
+      boxes.length = mark.boxes
+      frontier.forEach((f, i) => { f.onPlot.length = mark.plots[i] })
+      break
+    }
+    if (!next.length) { exhausted = true; break }
     frontier = next
   }
-  return { structure: combine(pieces), pieces: pieces.length }
+  // the depth actually reached; exhausted = the graph ran dry before maxDepth
+  // (deeper solves can't add anything), as opposed to hitting the piece cap
+  let depth = 0
+  for (const p of pieces) if (p.depth > depth) depth = p.depth
+  exhausted = exhausted && pieces.length < maxPieces
+  // vanilla semantics: a jigsaw block is only replaced by its final_state once
+  // it has RUN. the final level's pieces haven't run theirs yet, so those stay
+  // visible jigsaw blocks while more levels exist; the look-ahead already ran
+  // a dry frontier's jigsaws, so at max depth none remain in the model
+  if (!exhausted) for (const p of pieces) if (p.depth === depth) p.keepJigsaws = true
+  return { structure: combine(pieces), pieces: pieces.length, depth, exhausted }
 }

@@ -74,6 +74,10 @@ export function rotateState(props, k) {
   if (!props || !(k & 3)) return props
   const p = { ...props }
   if (p.facing && DIR[p.facing]) p.facing = rotDir(p.facing, k)
+  if (p.orientation) { // jigsaw blocks: "<front>_<top>"
+    const i = p.orientation.lastIndexOf("_")
+    if (i > 0) p.orientation = rotDir(p.orientation.slice(0, i), k) + "_" + rotDir(p.orientation.slice(i + 1), k)
+  }
   if (k & 1) {
     if (p.axis === "x") p.axis = "z"
     else if (p.axis === "z") p.axis = "x"
@@ -107,6 +111,10 @@ export function mirrorState(props, mir) {
   if (!props || !mir) return props
   const p = { ...props }
   if (p.facing && DIR[p.facing]) p.facing = mirrorDir(p.facing, mir)
+  if (p.orientation) {
+    const i = p.orientation.lastIndexOf("_")
+    if (i > 0) p.orientation = mirrorDir(p.orientation.slice(0, i), mir) + "_" + mirrorDir(p.orientation.slice(i + 1), mir)
+  }
   // stairs: inner/outer left/right swap only when the facing axis equals the
   // flipped axis
   if (p.shape && /left|right/.test(p.shape)) {

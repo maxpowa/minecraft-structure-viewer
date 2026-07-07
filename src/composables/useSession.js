@@ -104,7 +104,15 @@ async function regenerate() {
   try {
     let structure
     try {
-      structure = (await resolve(state.level)).structure
+      const res = await resolve(state.level)
+      structure = res.structure
+      // a jigsaw graph that ran dry IS at max depth: deeper levels would
+      // re-solve to the same result (e.g. the outpost's declared size is 7
+      // but its features have no onward jigsaws past depth 2)
+      if (state.kind === "jigsaw" && res.exhausted) {
+        state.maxDepth = res.depth
+        if (state.level > res.depth) state.level = res.depth
+      }
     } catch (err) {
       buildApi.state.status = `couldn't assemble: ${err}`
       return

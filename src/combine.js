@@ -11,7 +11,7 @@ const CHEST_MARKER = /^Chest(West|East|South|North)$/
 export function combine(pieces) {
   const cells = new Map()
   for (const piece of pieces) {
-    const { struct, rot = 0, off = [0, 0, 0], mir = null, ow = false } = piece
+    const { struct, rot = 0, off = [0, 0, 0], mir = null, ow = false, keepJigsaws = false } = piece
     for (const b of struct.blocks) {
       const e = struct.palette[b.state]
       if (!e?.Name) continue
@@ -30,10 +30,14 @@ export function combine(pieces) {
         continue
       }
       if (JIGSAW.test(e.Name)) {
-        const fs = parseState(typeof b.nbt?.final_state === "string" ? b.nbt.final_state : "")
-        if (AIR.test(fs.Name)) continue
-        cells.set(key, { Name: fs.Name, Properties: rotateState(mirrorState(fs.Properties, mir), rot) })
-        continue
+        // a piece whose jigsaws haven't run yet keeps them as jigsaw blocks
+        // (vanilla only swaps in final_state once a jigsaw has been processed)
+        if (!keepJigsaws) {
+          const fs = parseState(typeof b.nbt?.final_state === "string" ? b.nbt.final_state : "")
+          if (AIR.test(fs.Name)) continue
+          cells.set(key, { Name: fs.Name, Properties: rotateState(mirrorState(fs.Properties, mir), rot) })
+          continue
+        }
       }
       cells.set(key, { Name: e.Name, Properties: rotateState(mirrorState(e.Properties, mir), rot), nbt: b.nbt })
     }
