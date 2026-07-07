@@ -84,6 +84,7 @@ function onExport(ev) {
   gap: 8px;
   cursor: pointer;
   color: var(--text);
+  user-select: none;
 }
 
 button {
