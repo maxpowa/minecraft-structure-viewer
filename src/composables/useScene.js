@@ -48,30 +48,81 @@ function makeRectGrid({ x, z, w, d, y }) {
     P.push(x, y, z + j * 16, x + w * 16, y, z + j * 16)
     push(j * 2 === d ? cross : line)
   }
-  // north indicator: a vector "N" just past the north (-z) edge, drawn with
-  // the same line material so it stays crisp at any zoom
-  const nx = x + w * 8, x0 = nx - 4, x1 = nx + 4, zb = z - 4, zt = z - 14
-  P.push(x0, y, zb, x0, y, zt, x0, y, zt, x1, y, zb, x1, y, zb, x1, y, zt)
-  const ncol = new THREE.Color(0x62626a)
-  for (let i = 0; i < 3; i++) push(ncol)
   const geo = new THREE.BufferGeometry()
   geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3))
   geo.setAttribute("color", new THREE.Float32BufferAttribute(C, 3))
   return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }))
 }
 
-// rects: [{ x, z, y, w, d }] with x/z/y in world units and w/d in blocks
+// north indicator: a vector "N" just past the north (-z) edge, drawn as
+// lines so it stays crisp at any zoom. hidden once the camera is far enough
+// that it would just be clutter
+function makeNorth({ x, z, y, w, d }) {
+  const nx = x + w * 8, x0 = nx - 2.5, x1 = nx + 2.5, zb = z - 3, zt = z - 9
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute("position", new THREE.Float32BufferAttribute([x0, y, zb, x0, y, zt, x0, y, zt, x1, y, zb, x1, y, zb, x1, y, zt], 3))
+  const seg = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x62626a }))
+  seg.userData = { center: new THREE.Vector3(x + w * 8, y, z + d * 8), showDist: Math.max(600, Math.hypot(w, d) * 40) }
+  return seg
+}
+
+// combination mode: the north marker's spot holds a floating nametag
+// instead, fading in as the camera gets near that structure
+function makeNameTag({ x, z, y, w, d, label }) {
+  const fs = 32, pad = 10
+  const c = document.createElement("canvas")
+  let ctx = c.getContext("2d")
+  ctx.font = `${fs}px ui-monospace, monospace`
+  c.width = Math.ceil(ctx.measureText(label).width) + pad * 2
+  c.height = fs + pad * 2
+  ctx = c.getContext("2d")
+  ctx.font = `${fs}px ui-monospace, monospace`
+  ctx.fillStyle = "#00000059"
+  ctx.fillRect(0, 0, c.width, c.height)
+  ctx.fillStyle = "#c8c8d0"
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText(label, c.width / 2, c.height / 2)
+  const tex = new THREE.CanvasTexture(c)
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }))
+  const H = 7
+  spr.scale.set(H * c.width / c.height, H, 1)
+  spr.position.set(x + w * 8, y + 6, z - 6)
+  spr.userData = { center: new THREE.Vector3(x + w * 8, y, z + d * 8), showDist: Math.max(350, Math.hypot(w, d) * 20), fades: true }
+  return spr
+}
+
+// proximity for the markers: ortho "zoom" moves no closer, so divide it out
+function updateGridLabels() {
+  if (!gridGroup) return
+  for (const o of gridGroup.children) {
+    const u = o.userData
+    if (!u.showDist) continue
+    const dist = camera.position.distanceTo(u.center) / (camera.zoom || 1)
+    if (u.fades) {
+      const f = Math.min(Math.max((u.showDist - dist) / (u.showDist * 0.15), 0), 1)
+      o.visible = f > 0
+      o.material.opacity = f
+    } else o.visible = dist < u.showDist
+  }
+}
+
+// rects: [{ x, z, y, w, d, label? }] with x/z/y in world units, w/d in blocks
 function setGrids(rects) {
   if (gridGroup) {
     gridGroup.removeFromParent()
     gridGroup.traverse(o => {
       o.geometry?.dispose()
+      o.material?.map?.dispose?.()
       o.material?.dispose?.()
     })
   }
   gridGroup = new THREE.Group()
   gridGroup.visible = gridVisible()
-  for (const r of rects) gridGroup.add(makeRectGrid(r))
+  for (const r of rects) {
+    gridGroup.add(makeRectGrid(r))
+    gridGroup.add(r.label ? makeNameTag(r) : makeNorth(r))
+  }
   scene.add(gridGroup)
   refreshSphere()
 }
@@ -183,6 +234,7 @@ function init(canvasEl) {
     // while walking, the walk sim drives the camera instead of the orbit
     if (!walkUpdate?.(dt)) controls.update()
     updateClips()
+    updateGridLabels()
     for (const a of animators) a.update()
     renderer.render(scene, camera)
   })

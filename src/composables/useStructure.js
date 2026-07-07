@@ -69,8 +69,9 @@ const setVanillaParam = rel => {
 // __parts describing where each one landed
 function packLoaded() {
   const GAP = 3
-  const cells = loaded.map(({ structure: s }) => ({
+  const cells = loaded.map(({ structure: s, name }) => ({
     s,
+    name: name.split("/").at(-1),
     gw: s.size[0] + 6 + (s.size[0] % 2),
     gd: s.size[2] + 6 + (s.size[2] % 2)
   }))
@@ -90,7 +91,7 @@ function packLoaded() {
     }
     best ??= [0, Math.max(0, ...placed.map(p => p.z + p.d + GAP))]
     placed.push({ x: best[0], z: best[1], w: c.gw, d: c.gd })
-    parts.push({ s: c.s, off: [best[0] + 3, 0, best[1] + 3], size: c.s.size })
+    parts.push({ s: c.s, name: c.name, off: [best[0] + 3, 0, best[1] + 3], size: c.s.size })
   }
   const palette = [], byKey = new Map()
   const stateFor = e => {
@@ -119,7 +120,7 @@ function packLoaded() {
   return {
     size: [mx, my, mz],
     palette, blocks,
-    __parts: parts.map(({ off, size }) => ({ off, size }))
+    __parts: parts.map(({ off, size, name }) => ({ off, size, name }))
   }
 }
 

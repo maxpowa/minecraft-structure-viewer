@@ -505,7 +505,8 @@ async function build(structure = source, refit = true) {
         z: position.z + (p.off[2] - 3) * 16 - 8,
         y: position.y + p.off[1] * 16 - 8.01,
         w: gw,
-        d: gd
+        d: gd,
+        label: p.name
       }
     }))
     if (refit) sceneApi.fit()
