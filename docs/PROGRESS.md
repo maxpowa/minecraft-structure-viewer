@@ -115,10 +115,35 @@ and correct .js/.zip MIME types works).
     structures collected side by side with live water, clear returns to origin,
     glb magic + obj text + raw/collected mesh counts all correct. Console clean.
 
+- Build step 7 (jigsaw + levels) DONE:
+  - src/transforms.js (DECISIONS 2): DIR/HORIZ/OPP, rotPos/rotDir, mulberry32
+    rnd + shuffle + mix, parseState, rotateState (facing/axis/rotation/connection
+    sides), mirrorPos/mirrorState (mansion-ready), air regexes, jigsawsOf,
+    worldJigsaw, pieceBox/boxHit/inBox, poolTemplates with EMPTY symbol.
+  - src/combine.js (DECISIONS 4): later-piece-wins cells, ow carving, mansion
+    chest markers, jigsaw final_state, normalise + palette dedupe + anchor.
+  - src/jigsaw.js (DECISIONS 3): BFS per-level rng (levelSeed(d+1)), pool +
+    fallback candidates, canAttach (front/joint/target), attach-inside free
+    regions (src.onPlot) vs global boxes, maxRadius 96, caps 128 pieces.
+  - src/composables/useSession.js (DECISIONS 13): session for jigsaw palettes
+    (procedurals hook in via the exported `generators` map, filled in step 8),
+    0-based level, seed picked on first ascent + cleared at base, ops
+    next/all/undo/reset/reloadAll/fullReload (all/full target Infinity and clamp
+    after re-probe), anchor-delta camera tracking on regenerate, ?seed=<hex> +
+    ?level=<1-based> URL sync and one-time adoption, rebase() for pack swaps.
+  - LevelMenu.vue bottom-right expandable menu; disabled states at ends; whole
+    menu pointer-events off while locked. main.js __sv gains session.
+  - Playwright-verified: plains fountain grows 117 -> 298 -> 883 -> 4052 blocks
+    (draws 30.7K -> 5), undo/redo reproducible (fingerprint match), URL reload
+    with seed+level rebuilds the identical village, reload re-rolls at depth,
+    reset returns to base + clears URL, outpost assembles on its base plate
+    (no tent pile-up), non-jigsaw structures get no menu. Console clean.
+
 ## Next steps
 
-1. Build order step 7 (jigsaw assembler + level menu + seeds, DECISIONS 3/13).
-2. Then steps 8-10 per PLAN.md.
+1. Build order step 8 (procedural generators: igloo, end city, mansion,
+   DECISIONS 5) registering into useSession's `generators` map.
+2. Then steps 9-10 per PLAN.md.
 3. Open questions to settle with Ewan when relevant (DECISIONS.md section 18):
    pack-change auto-rebuild or explicit, easy-tooltips vs in-app tooltip, samples.
 

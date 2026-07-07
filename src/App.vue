@@ -9,6 +9,7 @@ import { useScene } from "./composables/useScene.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
 import ViewSection from "./components/ViewSection.vue"
+import LevelMenu from "./components/LevelMenu.vue"
 
 const libError = ref("")
 const canvasEl = ref(null)
@@ -67,6 +68,7 @@ onMounted(async () => {
       <div v-if="current.error" class="chip error">{{ current.error }}</div>
       <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
       <div v-else-if="info" class="chip">{{ info }}</div>
+      <LevelMenu />
     </main>
   </div>
 </template>

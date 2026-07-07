@@ -10,14 +10,16 @@ if (import.meta.env.DEV) {
     import("./composables/useStructures.js"),
     import("./composables/useStructure.js"),
     import("./composables/useBuild.js"),
-    import("./composables/useScene.js")
-  ]).then(([packs, structures, structure, build, scene]) => {
+    import("./composables/useScene.js"),
+    import("./composables/useSession.js")
+  ]).then(([packs, structures, structure, build, scene, session]) => {
     window.__sv = {
       packs: packs.usePacks(),
       structures: structures.useStructures(),
       structure: structure.useStructure(),
       build: build.useBuild(),
-      scene: scene.useScene()
+      scene: scene.useScene(),
+      session: session.useSession()
     }
   })
 }

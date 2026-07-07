@@ -3,6 +3,7 @@ import { loadLibrary } from "../lib.js"
 import { usePacks } from "./usePacks.js"
 import { useStructures } from "./useStructures.js"
 import { useBuild } from "./useBuild.js"
+import { useSession } from "./useSession.js"
 import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
 
@@ -11,6 +12,7 @@ import { readStructure } from "../nbt.js"
 const packs = usePacks()
 const structures = useStructures()
 const buildApi = useBuild()
+const session = useSession()
 const { locked, withLock } = useLock()
 
 const structure = buildApi.current
@@ -22,9 +24,10 @@ const setVanillaParam = rel => {
   history.replaceState(null, "", u)
 }
 
-async function loadStructure(s, refit = true) {
+async function loadStructure(s, name, refit = true) {
   if (!s) return
   await buildApi.build(s, refit)
+  await session.startSession(s, name)
 }
 
 async function readVanilla(rel) {
@@ -44,7 +47,7 @@ function loadVanilla(rel) {
       state.name = rel
       structures.stateMut.selected = rel
       setVanillaParam(rel)
-      await loadStructure(s)
+      await loadStructure(s, rel)
     } catch (err) {
       state.error = `couldn't load structure: ${err}`
     }
@@ -60,7 +63,7 @@ function loadFile(file) {
       state.name = file.name.replace(/\.nbt$/, "")
       structures.stateMut.selected = null
       setVanillaParam(null)
-      await loadStructure(s)
+      await loadStructure(s, state.name)
     } catch (err) {
       state.error = `couldn't read ${file.name}: ${err}`
     }
@@ -74,7 +77,10 @@ async function onAssetsSwapped() {
   if (sel && structures.has(sel)) {
     try {
       const s = await readVanilla(sel)
-      if (s) { await buildApi.build(s, false, true); return }
+      if (s) {
+        if (!await session.rebase(s, sel)) await buildApi.build(s, false, true)
+        return
+      }
     } catch {}
   }
   if (structure.value) await buildApi.build(structure.value, false)
