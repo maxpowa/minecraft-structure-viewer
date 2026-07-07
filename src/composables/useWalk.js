@@ -497,10 +497,12 @@ function suspend() {
   if (document.pointerLockElement === sceneApi.canvas) document.exitPointerLock()
 }
 
+// suspension lifts when the lock is actually re-acquired (see the
+// pointerlockchange handler): the request can be denied without a fresh
+// user gesture (Esc closing the modal), and the next canvas click retries
 function resume() {
   if (!state.on || !state.suspended) return
-  state.suspended = false
-  sceneApi.canvas.requestPointerLock()?.catch?.(() => exit())
+  sceneApi.canvas.requestPointerLock()?.catch?.(() => {})
 }
 
 function exit() {
@@ -545,7 +547,9 @@ sceneApi.setWalkUpdate(dt => {
 })
 
 document.addEventListener("pointerlockchange", () => {
-  if (state.on && !state.suspended && document.pointerLockElement !== sceneApi.canvas) exit()
+  if (!state.on) return
+  if (document.pointerLockElement === sceneApi.canvas) state.suspended = false
+  else if (!state.suspended) exit()
 })
 document.addEventListener("mousemove", e => {
   if (!state.on || document.pointerLockElement !== sceneApi.canvas) return
@@ -600,8 +604,17 @@ addEventListener("wheel", e => {
 }, { passive: false })
 // click to interact: toggle the door/trapdoor/gate you're looking at, or
 // open the loot modal for a container (detaching the controls until closed)
+addEventListener("contextmenu", e => {
+  if (state.on) e.preventDefault()
+})
 addEventListener("mousedown", e => {
-  if (!state.on || state.suspended || document.pointerLockElement !== sceneApi.canvas) return
+  if (!state.on) return
+  // suspended with the modal closed (Esc denied the relock): a click retries
+  if (state.suspended) {
+    if (!containerApi.state.open && document.pointerLockElement !== sceneApi.canvas) resume()
+    return
+  }
+  if (document.pointerLockElement !== sceneApi.canvas) return
   e.preventDefault()
   const perspCam = sceneApi.perspCam
   const d = new THREE.Vector3()

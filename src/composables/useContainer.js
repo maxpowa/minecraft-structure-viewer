@@ -317,6 +317,7 @@ function hoverCheck(e, canvas) {
 }
 
 function initPicking(canvas) {
+  canvas.addEventListener("contextmenu", e => e.preventDefault())
   canvas.addEventListener("pointerdown", e => {
     downX = e.clientX
     downY = e.clientY
