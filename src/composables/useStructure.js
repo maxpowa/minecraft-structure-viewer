@@ -144,27 +144,75 @@ async function readVanilla(rel) {
   return readStructure(await lib.readFile(zp, packs.assets.value))
 }
 
-// additive (shift/ctrl-click) keeps what is already there; clicking an
-// already-loaded structure additively removes it instead of duplicating
-function loadVanilla(rel, additive = false) {
+// the sidebar's visual order: with a search active it is the flat result
+// list, otherwise the tree (folders before files at every level, same as
+// TreeFolder renders). loads always sort into this order, and shift ranges
+// span it, across folder boundaries
+function visualOrder() {
+  const names = structures.visibleNames()
+  if (structures.state.filterText.trim()) return new Map(names.map((n, i) => [n, i]))
+  const root = { dirs: new Map(), files: [] }
+  for (const rel of names) {
+    const parts = rel.split("/")
+    let node = root
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!node.dirs.has(parts[i])) node.dirs.set(parts[i], { dirs: new Map(), files: [] })
+      node = node.dirs.get(parts[i])
+    }
+    node.files.push(rel)
+  }
+  const order = new Map()
+  const walk = node => {
+    for (const child of node.dirs.values()) walk(child)
+    for (const rel of node.files) order.set(rel, order.size)
+  }
+  walk(root)
+  return order
+}
+
+function sortLoaded(order) {
+  loaded.sort((a, b) => (order.get(a.rel) ?? Infinity) - (order.get(b.rel) ?? Infinity))
+}
+
+// plain click loads one; ctrl-click toggles membership; shift-click loads the
+// whole tree range between the last plain/ctrl click and here
+let anchor = null
+function loadVanilla(rel, ev) {
   if (locked.value) return
+  const shift = !!ev?.shiftKey, ctrl = !!(ev?.ctrlKey || ev?.metaKey)
   return withLock(async () => {
     state.error = ""
     try {
-      if (additive && loaded.length) {
+      const order = visualOrder()
+      if (shift && anchor != null && anchor !== rel && order.has(anchor) && order.has(rel)) {
+        const [lo, hi] = [order.get(anchor), order.get(rel)].sort((a, b) => a - b)
+        const range = [...order.entries()].filter(([, i]) => i >= lo && i <= hi).map(([r]) => r)
+        const entries = []
+        for (const r of range) {
+          const existing = loaded.find(e => e.rel === r)
+          const s = existing?.structure ?? await readVanilla(r)
+          if (s) entries.push({ structure: s, name: r, rel: r })
+        }
+        if (!entries.length) return
+        loaded = entries
+      } else if (ctrl && loaded.length) {
         const at = loaded.findIndex(e => e.rel === rel)
         if (at >= 0) {
           if (loaded.length === 1) return
           loaded.splice(at, 1)
-          await apply()
-          return
+        } else {
+          const s = await readVanilla(rel)
+          if (!s) return
+          loaded.push({ structure: s, name: rel, rel })
+          sortLoaded(order)
         }
+        anchor = rel
+      } else {
+        const s = await readVanilla(rel)
+        if (!s) return
+        loaded = [{ structure: s, name: rel, rel }]
+        anchor = rel
       }
-      const s = await readVanilla(rel)
-      if (!s) return
-      const entry = { structure: s, name: rel, rel }
-      if (additive && loaded.length) loaded.push(entry)
-      else loaded = [entry]
       await apply()
     } catch (err) {
       state.error = `couldn't load structure: ${err}`
@@ -172,7 +220,7 @@ function loadVanilla(rel, additive = false) {
   })
 }
 
-// startup with ?vanilla=a,b,c: load the whole set in one build
+// startup with an encoded ?vanilla list: load the whole set in one build
 function loadMany(rels) {
   if (locked.value) return
   return withLock(async () => {
@@ -185,6 +233,8 @@ function loadMany(rels) {
       }
       if (!entries.length) return
       loaded = entries
+      sortLoaded(visualOrder())
+      anchor = loaded.at(-1)?.rel ?? null
       await apply()
     } catch (err) {
       state.error = `couldn't load structures: ${err}`

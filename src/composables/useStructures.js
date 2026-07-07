@@ -121,10 +121,18 @@ function filteredNames() {
   return set ? state.names.filter(n => set.has(n)) : state.names
 }
 
+// what the sidebar list is currently showing (filter mode + search text)
+function visibleNames() {
+  let names = filteredNames()
+  const q = state.filterText.trim().toLowerCase()
+  if (q) names = names.filter(n => n.toLowerCase().includes(q))
+  return names
+}
+
 const zipPathOf = name => structPath.get(name)
 const has = name => structPath.has(name)
 const getStructDepth = name => structDepth?.get(name)
 
 export function useStructures() {
-  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, zipPathOf, has, getStructDepth }
+  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, visibleNames, zipPathOf, has, getStructDepth }
 }
