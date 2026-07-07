@@ -91,7 +91,8 @@ function remapFluidStates(structure, lib) {
       const ne = nb && structure.palette[nb.state]
       return ne?.Name ? { id: ne.Name, properties: ne.Properties } : null
     })
-    const key = `${e.Name}|${JSON.stringify(e.Properties ?? null)}|${h.nw.toFixed(3)},${h.ne.toFixed(3)},${h.sw.toFixed(3)},${h.se.toFixed(3)}|${h.full ? 1 : 0}|${h.angle == null ? "" : h.angle.toFixed(2)}`
+    const ov = h.overlay ? (h.overlay.north ? "n" : "") + (h.overlay.south ? "s" : "") + (h.overlay.east ? "e" : "") + (h.overlay.west ? "w" : "") : ""
+    const key = `${e.Name}|${JSON.stringify(e.Properties ?? null)}|${h.nw.toFixed(3)},${h.ne.toFixed(3)},${h.sw.toFixed(3)},${h.se.toFixed(3)}|${h.full ? 1 : 0}|${h.angle == null ? "" : h.angle.toFixed(2)}|${ov}`
     let idx = byKey.get(key)
     if (idx === undefined) {
       idx = structure.palette.length
