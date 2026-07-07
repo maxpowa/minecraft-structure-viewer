@@ -1,12 +1,22 @@
 <script setup>
 import { useScene } from "../composables/useScene.js"
 import { useBuild } from "../composables/useBuild.js"
+import { useStructure } from "../composables/useStructure.js"
 import { useLock } from "../composables/useLock.js"
 
 const sceneApi = useScene()
 const { view } = sceneApi
-const { state: buildState, clearCollected } = useBuild()
+const { state: buildState, clearCollected, exportCurrent } = useBuild()
+const { state: structureState } = useStructure()
 const { locked } = useLock()
+
+function onExport(ev) {
+  const v = ev.target.value
+  ev.target.value = ""
+  if (!v) return
+  const [format, raw] = v.split(":")
+  exportCurrent(format, raw === "raw", structureState.name)
+}
 </script>
 
 <template>
@@ -17,6 +27,14 @@ const { locked } = useLock()
       <select id="lighting" v-model="buildState.lighting" :disabled="locked">
         <option value="world">World</option>
         <option value="off">Off</option>
+      </select>
+      <label for="export">Export</label>
+      <select id="export" :disabled="locked || !buildState.info" @change="onExport">
+        <option value="" selected>Save as…</option>
+        <option value="glb:opt">.glb</option>
+        <option value="glb:raw">.glb (raw)</option>
+        <option value="obj:opt">.obj</option>
+        <option value="obj:raw">.obj (raw)</option>
       </select>
     </div>
     <label class="check">

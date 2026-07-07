@@ -5,6 +5,7 @@ import { usePacks } from "./usePacks.js"
 import { useScene } from "./useScene.js"
 import { useLock } from "./useLock.js"
 import { optimise } from "../optimise.js"
+import { exportScene } from "../export.js"
 
 const packs = usePacks()
 const sceneApi = useScene()
@@ -405,6 +406,20 @@ async function build(structure = current.value, refit = true, replace = false) {
 
 watch(() => state.lighting, () => { if (current.value) build(current.value, false) })
 
+async function exportCurrent(format, raw, name) {
+  if (!root || state.building) return
+  lock(true)
+  state.status = "exporting…"
+  try {
+    await exportScene({ format, raw, name, root, placed, structure: current.value, templates })
+    state.status = ""
+  } catch (err) {
+    state.status = `export failed: ${err}`
+  } finally {
+    lock(false)
+  }
+}
+
 const getRoot = () => root
 const getTemplates = () => templates
 const getNonSolid = () => nonSolid
@@ -412,6 +427,6 @@ const getNonSolid = () => nonSolid
 export function useBuild() {
   return {
     state, current, build, getRoot, getTemplates, getNonSolid,
-    blockAt, interact, aimDoor, currentBoxes, clearCollected
+    blockAt, interact, aimDoor, currentBoxes, clearCollected, exportCurrent
   }
 }
