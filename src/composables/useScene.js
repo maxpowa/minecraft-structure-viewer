@@ -67,6 +67,7 @@ function setGrids(rects) {
   gridGroup.visible = gridVisible()
   for (const r of rects) gridGroup.add(makeRectGrid(r))
   scene.add(gridGroup)
+  refreshSphere()
 }
 
 const _bb = new THREE.Box3()
@@ -75,6 +76,19 @@ function sceneBounds() {
   for (const r of contentRoots) _bb.expandByObject(r)
   if (_bb.isEmpty()) _bb.set(new THREE.Vector3(-8, -8, -8), new THREE.Vector3(8, 8, 8))
   return _bb
+}
+
+// the far plane follows the content: big combinations would otherwise get cut
+// off by the fixed clip when zoomed out. the sphere is cached per build
+// (setGrids fires once the meshes are in) and the clip tracks the camera
+const sceneSphere = new THREE.Sphere(new THREE.Vector3(), 300)
+const refreshSphere = () => sceneBounds().getBoundingSphere(sceneSphere)
+function updateClips() {
+  const far = Math.max((camera.position.distanceTo(sceneSphere.center) + sceneSphere.radius) * 1.2, 5000)
+  if (Math.abs(camera.far - far) > far * 0.01) {
+    camera.far = far
+    camera.updateProjectionMatrix()
+  }
 }
 
 function updateProjection() {
@@ -105,6 +119,7 @@ function setOrtho(on, halfH) {
 function fit() {
   if (!contentRoots.size) return
   const sphere = sceneBounds().getBoundingSphere(new THREE.Sphere())
+  sceneSphere.copy(sphere)
   const radius = Math.max(sphere.radius, 8)
   const dist = radius / Math.tan(THREE.MathUtils.degToRad(FOV / 2)) * 1.1
   camera.up.set(0, 1, 0)
@@ -161,6 +176,7 @@ function init(canvasEl) {
     resize()
     // while walking, the walk sim drives the camera instead of the orbit
     if (!walkUpdate?.(dt)) controls.update()
+    updateClips()
     for (const a of animators) a.update()
     renderer.render(scene, camera)
   })
