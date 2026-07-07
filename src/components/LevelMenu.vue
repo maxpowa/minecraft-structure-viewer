@@ -11,8 +11,10 @@ const open = ref(false)
 
 <template>
   <div v-if="s.active" class="level-menu" :class="{ locked }">
-    <!-- buttons that can't do anything at this level aren't rendered at all -->
-    <div v-if="open" class="panel">
+    <!-- buttons that can't do anything at this level aren't rendered at all.
+         collapsed, the panel is hidden but keeps its width so the head button
+         stretches to match -->
+    <div class="panel" :class="{ collapsed: !open }">
       <template v-if="s.steps">
         <button v-if="s.level < s.maxDepth" :disabled="locked" @click="session.next()">
           <span class="material-symbols-outlined">skip_next</span>
@@ -62,7 +64,6 @@ const open = ref(false)
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  min-width: 190px;
 }
 
 .head { white-space: nowrap; }
@@ -81,6 +82,8 @@ const open = ref(false)
   border-radius: 8px;
   padding: 6px;
 }
+
+.panel.collapsed { visibility: hidden; }
 
 button {
   display: flex;
