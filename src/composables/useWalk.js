@@ -152,7 +152,10 @@ function collideAxisOnce(ax, d) {
     corr = corr === null ? s : (d > 0 ? Math.min(corr, s) : Math.max(corr, s))
     hit = true
   }
-  if (corr !== null) walk.pos[ax] += corr
+  // back off a hair from the surface: an exactly-flush snap can land a
+  // float ulp INSIDE the box, which then counts as embedded and lets every
+  // later move pass through it (walking into floors, falling out the world)
+  if (corr !== null) walk.pos[ax] += corr - Math.sign(d) * 0.001
   return hit
 }
 
@@ -177,11 +180,23 @@ function stepMove(ax, d, grounded) {
   if (!grounded || walk.vel.y > 0) return true
   const snapped = walk.pos[ax]
   walk.pos[ax] = p0
-  walk.pos.y = y0 + STEP
+  // the trial lift clips against every ceiling over the current AND target
+  // footprint (like vanilla's expandTowards collide): a low doorway with a
+  // small rise is stepped with whatever headroom exists, where lifting the
+  // full STEP buried the head in the lintel and failed the whole step
+  const probe = paabb()
+  if (ax === "x") { if (d > 0) probe.px += d; else probe.nx += d }
+  else { if (d > 0) probe.pz += d; else probe.nz += d }
+  let lift = STEP
+  for (const b of nearby({ ...probe, py: probe.py + STEP })) {
+    if (b.px <= probe.nx || b.nx >= probe.px || b.pz <= probe.nz || b.nz >= probe.pz) continue
+    if (b.ny >= probe.py - 0.001) lift = Math.min(lift, b.ny - probe.py - 0.001)
+  }
+  walk.pos.y = y0 + Math.max(lift, 0)
   // stepped up ok: settle onto the ledge and stay grounded (so a staircase
   // keeps climbing frame after frame); otherwise too tall, stay put
-  if (!collideAxis(ax, d) && !isStuck()) {
-    if (collideAxis("y", -STEP)) walk.onGround = true
+  if (walk.pos.y > y0 + 0.01 && !collideAxis(ax, d) && !isStuck()) {
+    if (collideAxis("y", y0 - walk.pos.y)) walk.onGround = true
     walk.vel.y = 0
     // the partial-tick lerp must not replay the step (stepSmooth already
     // eases the eye up from the old height): both at once dips the camera
