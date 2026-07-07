@@ -176,7 +176,7 @@ watch(() => [state.open, state.stacks], () => {
                   Add Roll
                 </button>
                 <button :disabled="rendering" title="Add 100 rolls" @click="container.addRoll(100)">
-                  ×100
+                  +100
                 </button>
               </div>
             </div>
