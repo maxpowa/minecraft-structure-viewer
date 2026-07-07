@@ -17,22 +17,25 @@ function place() {
   const r = c.getBoundingClientRect()
   pos.value = { left: r.left + r.width / 2 + "px", top: r.top + r.height / 2 + "px" }
 }
-watch(() => state.on, on => { if (on) { place(); requestAnimationFrame(tick) } else arrow.value = null })
+watch(() => state.on, on => { if (on) place() })
 addEventListener("resize", () => { if (state.on) place() })
 
-// when no part of the structure is in the camera frustum, point an arrow at
-// the canvas edge toward it. the direction is the yaw/pitch DELTAS needed to
-// face the bounds centre, not the camera-space offset: pitch clamps at +-90,
-// so a target behind you must read as "turn around" (horizontal), never as
-// "pitch further" past the clamp
-const _frustum = new THREE.Frustum(), _m = new THREE.Matrix4(), _v = new THREE.Vector3()
+// when no part of the structure is in the camera frustum (walked past it, or
+// orbit-dragged it away), point an arrow at the canvas edge toward it. the
+// direction is the yaw/pitch DELTAS needed to face the bounds centre, not the
+// camera-space offset: pitch clamps at +-90, so a target behind you must read
+// as "turn around" (horizontal), never as "pitch further" past the clamp
+const _frustum = new THREE.Frustum(), _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _look = new THREE.Vector3()
 const wrapPi = a => ((a + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI
+const asin1 = v => Math.asin(Math.max(-1, Math.min(1, v)))
 
 function tick() {
-  if (!state.on) return
   requestAnimationFrame(tick)
-  const cam = sceneApi.perspCam, canvas = sceneApi.canvas
-  if (!canvas) return
+  const cam = sceneApi.camera, canvas = sceneApi.canvas
+  if (!canvas || !sceneApi.contentRoots.size) {
+    arrow.value = null
+    return
+  }
   _m.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse)
   _frustum.setFromProjectionMatrix(_m)
   const box = sceneApi.sceneBounds()
@@ -40,10 +43,12 @@ function tick() {
     arrow.value = null
     return
   }
+  // yaw/pitch from the real look direction, so any camera works (orbit, ortho,
+  // walk) regardless of its rotation order
+  cam.getWorldDirection(_look)
   box.getCenter(_v).sub(cam.position).normalize()
-  // walk camera rotation is YXZ: y = yaw, x = pitch (matching useWalk)
-  const dyaw = wrapPi(Math.atan2(-_v.x, -_v.z) - cam.rotation.y)
-  const dpitch = Math.asin(Math.max(-1, Math.min(1, _v.y))) - cam.rotation.x
+  const dyaw = wrapPi(Math.atan2(-_v.x, -_v.z) - Math.atan2(-_look.x, -_look.z))
+  const dpitch = asin1(_v.y) - asin1(_look.y)
   let dx = -dyaw, dy = -dpitch // CSS: right = negative yaw delta, down = negative pitch delta
   const n = Math.hypot(dx, dy)
   if (n < 1e-6) { dx = 1; dy = 0 } else { dx /= n; dy /= n }
@@ -55,13 +60,14 @@ function tick() {
     deg: Math.atan2(dy, dx) * 180 / Math.PI + 90 // glyph points up at 0
   }
 }
+requestAnimationFrame(tick)
 </script>
 
 <template>
+  <span v-if="arrow" class="dir-arrow material-symbols-outlined"
+    :style="{ left: arrow.left, top: arrow.top, transform: `translate(-50%, -50%) rotate(${arrow.deg}deg)` }">arrow_upward</span>
   <template v-if="state.on">
     <div class="crosshair" :style="pos"></div>
-    <span v-if="arrow" class="dir-arrow material-symbols-outlined"
-      :style="{ left: arrow.left, top: arrow.top, transform: `translate(-50%, -50%) rotate(${arrow.deg}deg)` }">arrow_upward</span>
     <div class="hint" :style="{ left: pos.left }">
       <b>WASD</b> move · <b>mouse</b> look · <b>click</b> open door · <b>space</b> jump · <b>2×space</b> fly ·
       <b>N</b> noclip · <b>shift</b> down/sneak · <b>ctrl/Q/2×W</b> sprint · <b>esc</b> exit
