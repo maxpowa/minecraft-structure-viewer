@@ -8,7 +8,9 @@ import { useLock } from "./useLock.js"
 // First-person walk-around: a pointer-locked FPS camera with gravity, AABB
 // collision against every rendered block (stairs/slabs walkable) + the ground
 // plane, auto step-up, sneak edge-guard, double-tap fly, and view bobbing.
-// World units: 16 = one block. Constants matched to Minecraft.
+// The sim runs at Minecraft's 20 ticks/s with the camera interpolated between
+// ticks, and the movement numbers (acceleration, drag, jump, fly impulses,
+// FOV easing) are the vanilla ones. World units: 16 = one block.
 const sceneApi = useScene()
 const buildApi = useBuild()
 const containerApi = useContainer()
@@ -22,14 +24,40 @@ const STEP = 9                                    // auto-climb up to ~half a bl
 const WALK_FOV = 78
 const DOUBLE_TAP = 350                            // minecraft's 7-tick window for double-tap sprint/fly
 
+// vanilla movement constants, per tick (velocities are units/tick)
+const TICK = 1 / 20
+const GRAVITY = 0.08 * 16
+const JUMP = 0.42 * 16                            // BASE_JUMP_POWER
+const SPRINT_JUMP_BOOST = 0.2 * 16
+const GROUND_DRAG = 0.6 * 0.91                    // default block friction x air drag
+const AIR_DRAG = 0.91
+const VERT_DRAG = 0.98
+const FLY_VERT_DRAG = 0.6                         // Player.travel keeps y = oldY * 0.6 while flying
+const WALK_SPEED = 0.1                            // MOVEMENT_SPEED attribute (blocks/tick of accel)
+const SPRINT_MOD = 1.3
+const AIR_ACCEL = 0.02, AIR_ACCEL_SPRINT = 0.025999999
+const SNEAK_MOD = 0.3                             // SNEAKING_SPEED attribute
+const INPUT_FRICTION = 0.98
+const FLY_SPEED_DEFAULT = 0.05                    // Abilities.flyingSpeed; scroll adjusts 0..0.2
+
 const state = reactive({ on: false, suspended: false })
 
-const walk = { pos: new THREE.Vector3(), vel: new THREE.Vector3(), yaw: 0, pitch: 0, onGround: false, crouched: false, h: H_STAND, eye: EYE_STAND }
-const fly = { on: false, lastSpace: -1e9 }
+const walk = {
+  pos: new THREE.Vector3(), prev: new THREE.Vector3(),
+  vel: new THREE.Vector3(),                       // units per tick
+  yaw: 0, pitch: 0, onGround: false, crouched: false,
+  h: H_STAND, eye: EYE_STAND, eyeO: EYE_STAND
+}
+// fly.on survives noclip: toggling noclip never touches it, so leaving noclip
+// puts you back in whichever mode you came from, momentum and speed intact
+const fly = { on: false, speed: FLY_SPEED_DEFAULT, lastSpace: -1e9 }
 let noclip = false
 let sprintW = false, lastW = -1e9                 // double-tap W latches sprint until W is released
-const bob = { dist: 0, val: 0, px: 0, pz: 0 }     // minecraft view-bob: walkDist, smoothed speed, last pos
+let jumpDelay = 0                                 // vanilla noJumpDelay: held space re-jumps every 10 ticks
+const bob = { dist: 0, distO: 0, val: 0, valO: 0 }// minecraft view-bob: walkDist + smoothed speed, per tick
+const fovMod = { cur: 1, old: 1 }                 // vanilla fov modifier, eased 0.5/tick toward its target
 let stepSmooth = 0                                // camera lag after an auto step-up, eased out like MC
+let acc = 0                                       // tick accumulator
 const keys = new Set()
 let collHash = new Map(), floorY = 0
 
@@ -106,8 +134,7 @@ function snapToGround() {
 }
 
 // move one axis by d, then snap out of the deepest overlapping box / the floor
-function collideAxis(ax, d) {
-  if (!d) return false
+function collideAxisOnce(ax, d) {
   // boxes we're already inside (e.g. a door just closed on us) are ignored so
   // we can walk out of them instead of being flung to their far side
   const pre = paabb(), embedded = new Set()
@@ -129,13 +156,25 @@ function collideAxis(ax, d) {
   return hit
 }
 
+// fast flying can cover several blocks a tick: split the move so a thin wall
+// can't be teleported straight through
+function collideAxis(ax, d) {
+  if (!d) return false
+  const n = Math.ceil(Math.abs(d) / 8)
+  for (let i = 0; i < n; i++) if (collideAxisOnce(ax, d / n)) return true
+  return false
+}
+
 // horizontal move with auto step-up: if blocked, try lifting by STEP and going
-// again, then settle onto the ledge (so slabs/stairs don't need a jump)
+// again, then settle onto the ledge (so slabs/stairs don't need a jump).
+// returns true when the move ended against a wall (so the velocity zeroes,
+// like vanilla's horizontalCollision)
 function stepMove(ax, d, grounded) {
-  if (!d) return
+  if (!d) return false
   const y0 = walk.pos.y, p0 = walk.pos[ax]
+  if (!collideAxis(ax, d)) return false
   // only auto-climb while standing on something (not mid-air / mid-jump)
-  if (!collideAxis(ax, d) || fly.on || !grounded || walk.vel.y > 0) return
+  if (!grounded || walk.vel.y > 0) return true
   const snapped = walk.pos[ax]
   walk.pos[ax] = p0
   walk.pos.y = y0 + STEP
@@ -145,10 +184,11 @@ function stepMove(ax, d, grounded) {
     if (collideAxis("y", -STEP)) walk.onGround = true
     walk.vel.y = 0
     stepSmooth = Math.min(STEP, stepSmooth + walk.pos.y - y0)
-  } else {
-    walk.pos.y = y0
-    walk.pos[ax] = snapped
+    return false
   }
+  walk.pos.y = y0
+  walk.pos[ax] = snapped
+  return true
 }
 
 // is there a block (or the ground plane) within a step below the feet? probing
@@ -176,105 +216,182 @@ function onClimbable() {
 // sneak: a horizontal move that would leave the player unsupported (off an
 // edge) is undone, so crouching keeps you on the block like minecraft
 function moveGround(ax, d, grounded, edgeGuard) {
-  if (!d) return
+  if (!d) return false
   const px = walk.pos.x, py = walk.pos.y, pz = walk.pos.z
-  stepMove(ax, d, grounded)
-  if (edgeGuard && !supported()) walk.pos.set(px, py, pz)
+  const blocked = stepMove(ax, d, grounded)
+  if (edgeGuard && !supported()) {
+    walk.pos.set(px, py, pz)
+    return true
+  }
+  return blocked
+}
+
+// vanilla input pipeline: normalise, x0.98, x0.3 sneaking, then scale back up
+// toward the unit square so diagonals aren't slower per axis
+function modifyInput(right, forward, slow) {
+  const l0 = Math.hypot(right, forward)
+  if (!l0) return [0, 0]
+  const dx = right / l0, dz = forward / l0
+  let len = INPUT_FRICTION
+  if (slow) len *= SNEAK_MOD
+  len = Math.min(len / Math.max(Math.abs(dx), Math.abs(dz)), 1)
+  return [dx * len, dz * len]
+}
+
+function stopFlying() {
+  fly.on = false
+  fly.speed = FLY_SPEED_DEFAULT // vanilla resets the scroll speed with flight
+}
+
+// one 1/20s step of the vanilla movement sim
+function tickSim() {
+  walk.prev.copy(walk.pos)
+  walk.eyeO = walk.eye
+  bob.distO = bob.dist
+  bob.valO = bob.val
+  fovMod.old = fovMod.cur
+
+  const sneakKey = keys.has("ShiftLeft") || keys.has("ShiftRight")
+  const fwdKey = keys.has("KeyW")
+  const sprintKey = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyQ") || sprintW
+  const flying = fly.on || noclip
+
+  // crouch shrinks the hitbox (1.8 -> 1.5); if a low ceiling blocks standing
+  // back up, stay crouched until there's headroom. the eye eases between the
+  // two heights at minecraft's 0.5/tick
+  walk.crouched = !flying && (sneakKey || (walk.crouched && !canStand()))
+  walk.h = walk.crouched ? H_SNEAK : H_STAND
+  walk.eye += ((walk.crouched ? EYE_SNEAK : EYE_STAND) - walk.eye) * 0.5
+
+  // like vanilla, sprint needs forward input, and never while sneaking
+  const sprint = sprintKey && fwdKey && !walk.crouched
+
+  const fwd = new THREE.Vector3(-Math.sin(walk.yaw), 0, -Math.cos(walk.yaw))
+  const rgt = new THREE.Vector3(Math.cos(walk.yaw), 0, -Math.sin(walk.yaw))
+  const [ir, ifw] = modifyInput(
+    (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0),
+    (fwdKey ? 1 : 0) - (keys.has("KeyS") ? 1 : 0),
+    walk.crouched
+  )
+  const inX = rgt.x * ir + fwd.x * ifw
+  const inZ = rgt.z * ir + fwd.z * ifw
+
+  if (flying) {
+    // creative/spectator flight: space/shift add a 3x-speed vertical impulse,
+    // horizontal accelerates by the (scrollable) fly speed, doubled while
+    // sprinting; drag is 0.91 sideways and a hard 0.6 vertically
+    const iy = (keys.has("Space") ? 1 : 0) - (sneakKey ? 1 : 0)
+    if (iy) walk.vel.y += iy * fly.speed * 3 * 16
+    const origY = walk.vel.y
+    const a = fly.speed * (sprint ? 2 : 1) * 16
+    walk.vel.x += inX * a
+    walk.vel.z += inZ * a
+    walk.onGround = false
+    if (noclip) {
+      walk.pos.add(walk.vel)
+    } else {
+      if (collideAxis("x", walk.vel.x)) walk.vel.x = 0
+      if (collideAxis("z", walk.vel.z)) walk.vel.z = 0
+      if (collideAxis("y", walk.vel.y) && walk.vel.y < 0) walk.onGround = true
+    }
+    walk.vel.x *= AIR_DRAG
+    walk.vel.z *= AIR_DRAG
+    walk.vel.y = origY * FLY_VERT_DRAG
+    // vanilla: descending into the ground lands you and turns flight off
+    if (fly.on && !noclip && walk.onGround) stopFlying()
+  } else {
+    const grounded = walk.onGround // pre-move contact drives accel, drag and step-up, like vanilla
+    const climbing = onClimbable() && !(keys.has("Space") && grounded)
+    // jump: 0.42 up, +0.2 forward while sprinting; held space re-jumps on
+    // vanilla's 10-tick delay
+    if (jumpDelay > 0) jumpDelay--
+    if (!keys.has("Space")) jumpDelay = 0
+    else if (grounded && !climbing && jumpDelay === 0) {
+      walk.vel.y = Math.max(JUMP, walk.vel.y)
+      if (sprint) {
+        walk.vel.x += fwd.x * SPRINT_JUMP_BOOST
+        walk.vel.z += fwd.z * SPRINT_JUMP_BOOST
+      }
+      jumpDelay = 10
+    }
+    // acceleration: full control on the ground (and, for playability, on a
+    // ladder), vanilla's small 0.02 nudge mid-air
+    const a = 16 * (grounded || climbing
+      ? WALK_SPEED * (sprint ? SPRINT_MOD : 1)
+      : sprint ? AIR_ACCEL_SPRINT : AIR_ACCEL)
+    walk.vel.x += inX * a
+    walk.vel.z += inZ * a
+    // on a ladder/vine: no gravity, W climbs up, S down, sneak holds, else slide
+    if (climbing) walk.vel.y = walk.crouched ? 0 : fwdKey ? 2.4 : keys.has("KeyS") ? -2.4 : -0.9
+    walk.onGround = false
+    // sneak keeps you on the surface even mid-step: guard while within a step
+    // of ground (not only when strictly grounded), so you can't slip off an
+    // edge during the little fall between stair steps
+    const edgeGuard = sneakKey && walk.vel.y <= 0 && (grounded || supported())
+    if (moveGround("x", walk.vel.x, grounded, edgeGuard)) walk.vel.x = 0
+    if (moveGround("z", walk.vel.z, grounded, edgeGuard)) walk.vel.z = 0
+    if (collideAxis("y", walk.vel.y)) {
+      if (walk.vel.y < 0) walk.onGround = true
+      walk.vel.y = 0
+    }
+    // post-move friction and gravity, vanilla travelInAir order (a ladder
+    // gets ground drag to pair with its ground accel, so no sideways build-up)
+    const drag = grounded || climbing ? GROUND_DRAG : AIR_DRAG
+    walk.vel.x *= drag
+    walk.vel.z *= drag
+    if (!climbing) walk.vel.y = (walk.vel.y - GRAVITY) * VERT_DRAG
+  }
+
+  // fov modifier: x1.1 while flying, x(ratio+1)/2 from the sprint speed
+  // attribute, eased 0.5/tick and clamped like vanilla's Camera.tickFov
+  let target = 1
+  if (flying) target *= 1.1
+  target *= ((sprint ? SPRINT_MOD : 1) + 1) / 2
+  fovMod.cur = Math.min(Math.max(fovMod.cur + (target - fovMod.cur) * 0.5, 0.1), 1.5)
+
+  // view bobbing: walkDist advances by horizontal distance x 0.6 (in blocks),
+  // bob eases toward the horizontal speed (capped 0.1) at 0.4/tick
+  bob.dist += Math.hypot(walk.pos.x - walk.prev.x, walk.pos.z - walk.prev.z) / 16 * 0.6
+  const bobTarget = (!flying && walk.onGround) ? Math.min(0.1, Math.hypot(walk.vel.x, walk.vel.z) / 16) : 0
+  bob.val += (bobTarget - bob.val) * 0.4
 }
 
 const _look = new THREE.Vector3()
+const lerp = (a, b, t) => a + (b - a) * t
 
 function updateWalk(dt) {
-  dt = Math.min(dt, 0.05)
-  const perspCam = sceneApi.perspCam
-  const sprint = keys.has("ControlLeft") || keys.has("ControlRight") || keys.has("KeyQ") || sprintW
-  if (noclip) {
-    // free camera: move along where you look (pitch included), no gravity/collision
-    const sp = sprint ? 260 : 140
-    const look = new THREE.Vector3(-Math.sin(walk.yaw) * Math.cos(walk.pitch), Math.sin(walk.pitch), -Math.cos(walk.yaw) * Math.cos(walk.pitch))
-    const rgtN = new THREE.Vector3(Math.cos(walk.yaw), 0, -Math.sin(walk.yaw))
-    const m = new THREE.Vector3()
-    if (keys.has("KeyW")) m.add(look)
-    if (keys.has("KeyS")) m.sub(look)
-    if (keys.has("KeyD")) m.add(rgtN)
-    if (keys.has("KeyA")) m.sub(rgtN)
-    if (m.lengthSq()) walk.pos.addScaledVector(m.normalize(), sp * dt)
-    walk.vel.set(0, 0, 0)
-    walk.onGround = false
-    walk.crouched = false
-    walk.h = H_STAND
-    walk.eye = EYE_STAND
-  } else {
-    const sneak = keys.has("ShiftLeft") || keys.has("ShiftRight")
-    // crouch shrinks the hitbox (1.8 -> 1.5); if a low ceiling blocks standing
-    // back up, stay crouched until there's headroom
-    walk.crouched = (sneak && !fly.on) || (walk.crouched && !canStand())
-    walk.h = walk.crouched ? H_SNEAK : H_STAND
-    walk.eye = walk.crouched ? EYE_SNEAK : EYE_STAND
-    const fwd = new THREE.Vector3(-Math.sin(walk.yaw), 0, -Math.cos(walk.yaw))
-    const rgt = new THREE.Vector3(Math.cos(walk.yaw), 0, -Math.sin(walk.yaw))
-    const dir = new THREE.Vector3()
-    if (keys.has("KeyW")) dir.add(fwd)
-    if (keys.has("KeyS")) dir.sub(fwd)
-    if (keys.has("KeyD")) dir.add(rgt)
-    if (keys.has("KeyA")) dir.sub(rgt)
-    if (dir.lengthSq()) dir.normalize()
-    if (fly.on) {
-      const sp = sprint ? 260 : 140
-      let vy = 0
-      if (keys.has("Space")) vy += 1
-      if (sneak) vy -= 1
-      collideAxis("x", dir.x * sp * dt)
-      collideAxis("z", dir.z * sp * dt)
-      collideAxis("y", vy * sp * dt)
-      walk.vel.set(0, 0, 0)
-      walk.onGround = false
-    } else {
-      const grounded = walk.onGround // last frame's contact: stepMove needs it before the reset below
-      const sp = walk.crouched ? 26 : sprint ? 118 : 78 // ~1.6 / 7.4 / 4.9 blocks/s
-      walk.vel.x = dir.x * sp
-      walk.vel.z = dir.z * sp
-      // on a ladder/vine: no gravity, W climbs up, S down, sneak holds, else slide
-      if (onClimbable() && !(keys.has("Space") && grounded)) {
-        walk.vel.y = walk.crouched ? 0 : keys.has("KeyW") ? 48 : keys.has("KeyS") ? -48 : -18
-      } else {
-        walk.vel.y -= 520 * dt
-        if (keys.has("Space") && grounded) walk.vel.y = 134
-      }
-      walk.onGround = false
-      // sneak keeps you on the surface even mid-step: guard while within a step
-      // of ground (not only when strictly grounded), so you can't slip off an
-      // edge during the little fall between stair steps
-      const edgeGuard = sneak && walk.vel.y <= 0 && (grounded || supported())
-      moveGround("x", walk.vel.x * dt, grounded, edgeGuard)
-      moveGround("z", walk.vel.z * dt, grounded, edgeGuard)
-      const hitY = collideAxis("y", walk.vel.y * dt)
-      if (hitY) {
-        if (walk.vel.y < 0) walk.onGround = true
-        walk.vel.y = 0
-      }
-    }
+  acc += Math.min(dt, 0.25)
+  let n = 0
+  while (acc >= TICK && n++ < 10) {
+    acc -= TICK
+    tickSim()
   }
-  // view bobbing, matching minecraft's GameRenderer.bobView: walkDist advances
-  // the phase (horizontal distance x 0.6, in blocks), bob is the smoothed
-  // horizontal speed (0..0.1) and scales the amplitude
-  const movedBlocks = Math.hypot(walk.pos.x - bob.px, walk.pos.z - bob.pz) / 16
-  bob.px = walk.pos.x
-  bob.pz = walk.pos.z
-  bob.dist += movedBlocks * 0.6
-  const bobTarget = (!fly.on && walk.onGround) ? Math.min(0.1, dt > 0 ? movedBlocks / (dt * 20) : 0) : 0
-  bob.val += (bobTarget - bob.val) * (1 - Math.pow(0.6, dt / 0.05)) // minecraft's 0.4-per-tick lerp
-  const wp = bob.dist * Math.PI, B = bob.val, RAD = Math.PI / 180
+  if (acc >= TICK) acc = 0 // heavy lag: drop the leftover instead of spiralling
+  const pt = acc / TICK
+  const perspCam = sceneApi.perspCam
+  // render between the last two ticks, like minecraft's partial ticks
+  const cx = lerp(walk.prev.x, walk.pos.x, pt)
+  const cy = lerp(walk.prev.y, walk.pos.y, pt)
+  const cz = lerp(walk.prev.z, walk.pos.z, pt)
+  const eye = lerp(walk.eyeO, walk.eye, pt)
+  const wp = lerp(bob.distO, bob.dist, pt) * Math.PI
+  const B = lerp(bob.valO, bob.val, pt)
+  const RAD = Math.PI / 180
   const swayU = Math.sin(wp) * B * 0.5 * 16, bounceU = Math.abs(Math.cos(wp) * B) * 16
   // ease the eye up after a step-up instead of snapping (like MC's per-tick lerp)
   stepSmooth *= Math.pow(0.5, dt / 0.045)
   if (stepSmooth < 0.05) stepSmooth = 0
   perspCam.position.set(
-    walk.pos.x + Math.cos(walk.yaw) * swayU,
-    walk.pos.y + walk.eye - bounceU - stepSmooth,
-    walk.pos.z - Math.sin(walk.yaw) * swayU
+    cx + Math.cos(walk.yaw) * swayU,
+    cy + eye - bounceU - stepSmooth,
+    cz - Math.sin(walk.yaw) * swayU
   )
   perspCam.rotation.set(walk.pitch + Math.abs(Math.cos(wp - 0.2) * B) * 5 * RAD, walk.yaw, Math.sin(wp) * B * 3 * RAD, "YXZ")
+  const fov = WALK_FOV * lerp(fovMod.old, fovMod.cur, pt)
+  if (Math.abs(perspCam.fov - fov) > 0.01) {
+    perspCam.fov = fov
+    perspCam.updateProjectionMatrix()
+  }
   // outline the interactable in reach (a touch larger than the model so it
   // doesn't z-fight); none while a modal has the controls detached
   perspCam.getWorldDirection(_look)
@@ -293,6 +410,7 @@ function enter() {
   if (sceneApi.camera !== perspCam) sceneApi.setOrthoManual(false)
   state.on = true
   fly.on = false
+  fly.speed = FLY_SPEED_DEFAULT
   noclip = false
   sceneApi.controls.enabled = false
   buildCollision()
@@ -308,6 +426,9 @@ function enter() {
   walk.crouched = false
   walk.h = H_STAND
   walk.eye = EYE_STAND
+  walk.eyeO = EYE_STAND
+  jumpDelay = 0
+  acc = 0
   // more than 10 blocks out from every floor grid: come in to the nearest
   // point on the closest one
   let best = null
@@ -323,10 +444,13 @@ function enter() {
   }
   bumpUp() // if we're buried in a block, lift to the first free space
   snapToGround()
+  walk.prev.copy(walk.pos)
   bob.dist = 0
+  bob.distO = 0
   bob.val = 0
-  bob.px = walk.pos.x
-  bob.pz = walk.pos.z
+  bob.valO = 0
+  fovMod.cur = 1
+  fovMod.old = 1
   stepSmooth = 0
   perspCam.fov = WALK_FOV
   perspCam.updateProjectionMatrix()
@@ -365,6 +489,7 @@ function exit() {
   state.on = false
   state.suspended = false
   noclip = false
+  stopFlying()
   sceneApi.controls.enabled = true
   keys.clear()
   if (document.pointerLockElement === sceneApi.canvas) document.exitPointerLock()
@@ -410,9 +535,17 @@ document.addEventListener("mousemove", e => {
 addEventListener("keydown", e => {
   if (!state.on || state.suspended) return
   e.preventDefault() // fully capture input: no ctrl+s / quick-find / space-scroll while walking
-  if (e.code === "Space" && !e.repeat) { // double-tap space toggles fly
+  if (e.code === "Space" && !e.repeat && !noclip) { // double-tap space toggles fly
     const t = performance.now()
-    if (t - fly.lastSpace < DOUBLE_TAP) { fly.on = !fly.on; walk.vel.set(0, 0, 0) }
+    if (t - fly.lastSpace < DOUBLE_TAP) {
+      if (fly.on) stopFlying() // momentum carries over: you just start falling
+      else {
+        fly.on = true
+        // vanilla hops when flight starts on the ground
+        if (walk.onGround) walk.vel.y = Math.max(JUMP, walk.vel.y)
+        walk.onGround = false
+      }
+    }
     fly.lastSpace = t
   }
   if (e.code === "KeyW" && !e.repeat) { // double-tap W to sprint (until W released)
@@ -420,10 +553,14 @@ addEventListener("keydown", e => {
     if (t - lastW < DOUBLE_TAP) sprintW = true
     lastW = t
   }
-  if (e.code === "KeyN" && !e.repeat) { // toggle noclip; leaving it, bump out of any block
-    noclip = !noclip
-    if (noclip) { fly.on = false; walk.vel.set(0, 0, 0) }
-    else { bumpUp(); walk.vel.set(0, 0, 0); walk.onGround = false }
+  if (e.code === "KeyN" && !e.repeat) { // toggle noclip; fly.on is untouched, so
+    noclip = !noclip                    // leaving noclip resumes flying (or falling) with momentum intact
+    if (!noclip) {
+      bumpUp() // leaving it inside a block: lift to the first free space
+      walk.prev.copy(walk.pos)
+      walk.onGround = false
+      if (!fly.on) fly.speed = FLY_SPEED_DEFAULT // back to walking: the scroll speed resets
+    }
   }
   keys.add(e.code)
 }, { passive: false })
@@ -432,6 +569,14 @@ addEventListener("keyup", e => {
   e.preventDefault()
   if (e.code === "KeyW") sprintW = false
   keys.delete(e.code)
+}, { passive: false })
+// scroll while flying/noclip adjusts the fly speed exactly like spectator
+// mode: 0.005 a notch, clamped 0..0.2 (default 0.05)
+addEventListener("wheel", e => {
+  if (!state.on || state.suspended || document.pointerLockElement !== sceneApi.canvas) return
+  if (!fly.on && !noclip) return
+  e.preventDefault()
+  fly.speed = Math.min(Math.max(fly.speed + Math.sign(-e.deltaY) * 0.005, 0), 0.2)
 }, { passive: false })
 // click to interact: toggle the door/trapdoor/gate you're looking at, or
 // open the loot modal for a container (detaching the controls until closed)
