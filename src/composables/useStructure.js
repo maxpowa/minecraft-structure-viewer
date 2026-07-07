@@ -69,9 +69,15 @@ const setVanillaParam = rel => {
 // __parts describing where each one landed
 function packLoaded() {
   const GAP = 3
-  const cells = loaded.map(({ structure: s, name }) => ({
+  // labels drop the folder prefix every loaded structure shares, keeping
+  // whatever distinguishes them (leaf only when siblings, longer paths when
+  // they diverge higher up)
+  const paths = loaded.map(e => e.name.split("/"))
+  let common = 0
+  while (paths.every(p => p.length - 1 > common && p[common] === paths[0][common])) common++
+  const cells = loaded.map(({ structure: s }, i) => ({
     s,
-    name: name.split("/").at(-1),
+    name: paths[i].slice(common).join("/"),
     gw: s.size[0] + 6 + (s.size[0] % 2),
     gd: s.size[2] + 6 + (s.size[2] % 2)
   }))
