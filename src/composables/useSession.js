@@ -88,7 +88,10 @@ async function resolve(level) {
       loadStruct, loadPool,
       maxDepth: level, maxPieces: 128, maxRadius: 96,
       levelSeed: l => mix(state.seed, l),
-      onProgress: n => { buildApi.state.status = `loading… ${n} pieces` }
+      onProgress: n => { buildApi.state.status = `loading… ${n} pieces` },
+      // at the declared depth cap no further level will ever run, so the
+      // frontier's jigsaws are consumed like vanilla's finished generation
+      keepJigsaws: level < state.maxDepth
     })
   }
   const gen = generators[state.kind]

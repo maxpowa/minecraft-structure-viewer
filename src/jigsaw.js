@@ -8,7 +8,7 @@ import { combine } from "./combine.js"
 
 const nsName = s => s.includes(":") ? s : "minecraft:" + s
 
-export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, maxPieces = 48, maxRadius = 96, levelSeed, onProgress }) {
+export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, maxPieces = 48, maxRadius = 96, levelSeed, onProgress, keepJigsaws = true }) {
   // misses cached too, so they aren't retried
   const structs = new Map(), pools = new Map()
   const getStruct = async ref => {
@@ -106,8 +106,9 @@ export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, max
   exhausted = exhausted && pieces.length < maxPieces
   // vanilla semantics: a jigsaw block is only replaced by its final_state once
   // it has RUN. the final level's pieces haven't run theirs yet, so those stay
-  // visible jigsaw blocks while more levels exist; the look-ahead already ran
-  // a dry frontier's jigsaws, so at max depth none remain in the model
-  if (!exhausted) for (const p of pieces) if (p.depth === depth) p.keepJigsaws = true
+  // visible jigsaw blocks while another level can still load them: the
+  // look-ahead consumed a dry frontier, and the caller flags a depth cap
+  // (keepJigsaws false), where generation is over regardless
+  if (!exhausted && keepJigsaws) for (const p of pieces) if (p.depth === depth) p.keepJigsaws = true
   return { structure: combine(pieces), pieces: pieces.length, depth, exhausted }
 }
