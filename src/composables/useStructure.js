@@ -62,18 +62,20 @@ function loadVanilla(rel) {
   })
 }
 
-// ?debug: the generated mesher test scene (src/debug.js), no files needed
-function loadDebug() {
+// ?debug: the generated mesher test scene (src/debug.js), no files needed.
+// a value picks a sub-scene, e.g. ?debug=fluid
+function loadDebug(kind) {
   if (locked.value) return
+  kind = kind && kind !== "1" ? kind : ""
   return withLock(async () => {
     state.error = ""
-    state.name = "debug"
+    state.name = kind ? `debug (${kind})` : "debug"
     structures.stateMut.selected = null
     setVanillaParam(null)
     const u = new URL(location)
-    u.searchParams.set("debug", "1")
+    u.searchParams.set("debug", kind || "1")
     history.replaceState(null, "", u)
-    await loadStructure(makeDebug(), "debug")
+    await loadStructure(makeDebug(kind), "debug")
   })
 }
 

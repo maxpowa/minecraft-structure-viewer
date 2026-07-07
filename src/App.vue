@@ -45,11 +45,11 @@ onMounted(async () => {
   const DEFAULT = "minecraft/village/plains/houses/plains_small_house_1"
   const params = new URLSearchParams(location.search)
   const vanilla = params.get("vanilla")
-  const debug = params.has("debug")
+  const debug = params.get("debug")
   const stop = watch(() => structures.state.names.length, n => {
     if (!n) return
     stop()
-    if (debug) loadDebug()
+    if (debug != null) loadDebug(debug)
     else if (vanilla && structures.has(vanilla)) loadVanilla(vanilla)
     else if (structures.has(DEFAULT)) loadVanilla(DEFAULT)
   })
