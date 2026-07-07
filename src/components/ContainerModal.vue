@@ -190,6 +190,7 @@ watch(() => [state.open, state.stacks, state.gui], () => {
         <div class="body" :class="{ compact: state.dataRows }">
 
           <div v-if="state.dataRows" class="pane data">
+            <p v-if="state.blurb" class="blurb">{{ state.blurb }}</p>
             <div class="facts" v-if="facts.length">
               <div v-for="r in facts" :key="r.label" class="fact">
                 <div class="fl">{{ r.label }}</div>
@@ -383,6 +384,13 @@ button.icon {
 .body.compact { min-height: 0; }
 
 .pane.data { gap: 8px; }
+
+.blurb {
+  margin: 0 2px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
 
 .fl {
   font-size: 11px;

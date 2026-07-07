@@ -51,6 +51,7 @@ const state = reactive({
   gui: null,       // the gui actually drawn (accumulated piles grow a chest)
   guiTitle: "",
   dataRows: null,  // technical blocks (command/structure/jigsaw) show these
+  blurb: "",       // one-liner explaining what this block does
   poolId: "",      // the pool the card currently shows
   poolEntries: null, // what that pool can place, weighted
   poolFallback: "",
@@ -151,6 +152,27 @@ function poolBack() {
   if (prev) loadPoolEntries(prev)
 }
 
+// what THIS jigsaw does during generation, phrased from its data: active
+// ones roll their pool and attach a piece, empty-pool ones are just the
+// attachment point a parent connects to
+function jigsawBlurb(p, nbt) {
+  const pool = stripNs(nbt?.pool ?? "")
+  const target = stripNs(nbt?.target ?? "")
+  const final = stripNs(nbt?.final_state ?? "").split("[")[0] || "air"
+  const dir = (p.orientation ?? "").split("_")[0]
+  const where = dir === "up" ? "on top of it" : dir === "down" ? "underneath it" : "beside it"
+  if (!pool || pool === "empty") {
+    return `A passive connection point: it places nothing itself, but a piece being generated can attach here by matching a jigsaw named "${target}". Once generation finishes it turns into ${final}.`
+  }
+  const vertical = dir === "up" || dir === "down"
+  const joint = vertical
+    ? (nbt?.joint === "aligned"
+      ? " The joint is aligned, so the attached piece keeps its rotation relative to this one."
+      : " The joint is rollable, so the attached piece can be randomly rotated.")
+    : ""
+  return `When this piece generates, the jigsaw rolls the pool below and attaches the picked piece ${where}, lining it up with a jigsaw named "${target}" inside that piece. If nothing fits, the fallback pool is tried.${joint} Once generation finishes this block turns into ${final}.`
+}
+
 async function open(block) {
   const entry = buildApi.current.value?.palette[block.state]
   const name = entry?.Name ?? "minecraft:chest"
@@ -159,6 +181,7 @@ async function open(block) {
   state.blockName = prettyName(name)
   state.kind = kindOf(name)
   state.dataRows = null
+  state.blurb = ""
   state.poolId = ""
   state.poolEntries = null
   state.poolFallback = ""
@@ -171,6 +194,7 @@ async function open(block) {
     state.gui = null
     state.guiTitle = ""
     state.dataRows = dataRowsFor(bare, entry?.Properties ?? {}, block.nbt)
+    if (bare === "jigsaw") state.blurb = jigsawBlurb(entry?.Properties ?? {}, block.nbt)
     openSeq++
     state.open = true
     if (bare === "jigsaw" && block.nbt?.pool && stripNs(block.nbt.pool) !== "empty") loadPoolEntries(block.nbt.pool)
