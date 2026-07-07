@@ -97,13 +97,13 @@ function onFile(e) {
     </h2>
     <div class="controls">
       <input v-model="stateMut.filterText" placeholder="Filter…">
-      <select :value="state.filterMode" @change="onMode" title="all: every structure. standalone: neither pulled into another build nor loads any other structure blocks. starters: anything that starts a build (never placed as a piece of another).">
+      <select :value="state.filterMode" @change="onMode" :disabled="locked" title="all: every structure. standalone: neither pulled into another build nor loads any other structure blocks. starters: anything that starts a build (never placed as a piece of another).">
         <option value="all">All</option>
         <option value="standalone">Standalone</option>
         <option value="starters">Starters</option>
       </select>
     </div>
-    <div class="tree" ref="treeEl">
+    <div class="tree" :class="{ disabled: locked }" ref="treeEl">
       <div v-if="state.indexing" class="empty">Indexing…</div>
       <template v-else>
         <div class="tree-root" title="Right-click for options" @contextmenu.prevent="onRootMenu($event)">All Structures</div>
@@ -170,6 +170,11 @@ h2 {
 }
 
 .tree .empty { color: var(--text-dim); }
+
+.tree.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
 
 .tree-root {
   color: var(--text);
