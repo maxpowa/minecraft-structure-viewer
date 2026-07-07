@@ -113,6 +113,7 @@ const state = reactive({
   hasStructureBlocks: false,
   building: false,
   status: "",
+  progress: null, // { phase: "build" | "optimise", done, total } while working
   info: null
 })
 
@@ -511,10 +512,12 @@ async function build(structure = source, refit = true) {
 
     // build every template up front (the optimiser reads them all)
     let placedCount = 0
+    state.progress = { phase: "build", done: 0, total: structure.blocks.length }
     for (let i = 0; i < structure.blocks.length; i++) {
       if (await template(structure.blocks[i].state)) placedCount++
       if (i % 400 === 399) {
         state.status = `building… ${i + 1}/${structure.blocks.length}`
+        state.progress = { phase: "build", done: i + 1, total: structure.blocks.length }
         await new Promise(r => setTimeout(r))
       }
     }
@@ -582,7 +585,8 @@ async function build(structure = source, refit = true) {
 
     const { group: next, atlasTextures: pending, drawCalls, tris } = await optimise(optStruct, templates, position, {
       getCullFaces: opts => lib.getCullFaces({ ...opts, assets }),
-      setStatus: s => { state.status = s }
+      setStatus: s => { state.status = s },
+      setProgress: (done, total) => { state.progress = { phase: "optimise", done, total } }
     })
 
     // atomic swap: show the new group first, then drop the old one + its atlases
@@ -624,6 +628,7 @@ async function build(structure = source, refit = true) {
     for (const t of oldTex) t.dispose()
   } finally {
     state.building = false
+    state.progress = null
     lock(false)
   }
 }

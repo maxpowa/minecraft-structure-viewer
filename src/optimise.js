@@ -236,8 +236,9 @@ function appendGroup(geo, start, count, mat, nmat, rect, W, H, acc) {
   }
 }
 
-export async function optimise(structure, templates, position, { getCullFaces, setStatus }) {
+export async function optimise(structure, templates, position, { getCullFaces, setStatus, setProgress }) {
   setStatus?.("optimising…")
+  setProgress?.(0, structure.blocks.length)
   tiledCache.clear()
   const pending = []
   await new Promise(r => setTimeout(r))
@@ -428,6 +429,7 @@ export async function optimise(structure, templates, position, { getCullFaces, s
     }
     if (i % 2000 === 1999) {
       setStatus?.(`optimising… ${i + 1}/${structure.blocks.length}`)
+      setProgress?.(i + 1, structure.blocks.length)
       await new Promise(r => setTimeout(r))
     }
   }
