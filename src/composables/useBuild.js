@@ -142,42 +142,82 @@ function blockAt(wx, wy, wz) {
   return i == null ? null : structure.palette[structure.blocks[i].state]
 }
 
-// clone both models of each openable block onto the fresh root, show the one
-// matching its state, index by cell with door halves linked
+// openable blocks render as ONE InstancedMesh per unique state per template
+// mesh, not per-block clone groups: a build with hundreds of trapdoors was
+// thousands of draw calls. a hidden instance is collapsed to zero scale, so
+// toggling stays a matrix write with no rebuild
+let doorSlots = new Map() // stateIdx -> { entries, meshes: InstancedMesh[], box }
+const _dm = new THREE.Matrix4()
+const _dzero = new THREE.Matrix4().makeScale(0, 0, 0)
+
+function setDoorInstance(stateIdx, slot, pos, visible) {
+  const s = doorSlots.get(stateIdx)
+  if (!s) return
+  for (const im of s.meshes) {
+    if (visible) im.setMatrixAt(slot, _dm.makeTranslation(pos[0] * 16, pos[1] * 16, pos[2] * 16).multiply(im.userData.baseMatrix))
+    else im.setMatrixAt(slot, _dzero)
+    im.instanceMatrix.needsUpdate = true
+  }
+}
+
 function attachDoors(entries) {
   const structure = current.value
   doorByCell = new Map()
-  for (const { b, openIdx, closedIdx } of entries) {
-    const mk = stateIdx => {
-      const t = templates.get(stateIdx)
-      if (!t) return null
-      const g = t.clone()
-      g.position.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16)
-      root.add(g)
-      return g
-    }
-    const open = structure.palette[b.state].Properties.open === "true"
-    const gOpen = mk(openIdx), gClosed = mk(closedIdx)
-    if (gOpen) gOpen.visible = open
-    if (gClosed) gClosed.visible = !open
-    doorByCell.set(b.pos.join(","), { b, openIdx, closedIdx, gOpen, gClosed, pair: null })
+  doorSlots = new Map()
+  if (!entries.length) return 0
+  // an instance slot per placement of each open/closed state
+  const slotFor = (e, stateIdx) => {
+    let s = doorSlots.get(stateIdx)
+    if (!s) doorSlots.set(stateIdx, s = { count: 0, meshes: [], box: null })
+    return s.count++
+  }
+  for (const e of entries) {
+    e.openSlot = slotFor(e, e.openIdx)
+    e.closedSlot = slotFor(e, e.closedIdx)
+  }
+  let draws = 0
+  for (const [stateIdx, s] of doorSlots) {
+    const tmpl = templates.get(stateIdx)
+    if (!tmpl) continue
+    tmpl.updateMatrixWorld(true)
+    s.box = new THREE.Box3().setFromObject(tmpl)
+    tmpl.traverse(o => {
+      if (!o.isMesh) return
+      const im = new THREE.InstancedMesh(o.geometry, o.material, s.count)
+      im.userData.baseMatrix = o.matrixWorld.clone()
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage)
+      // instances spread across the structure; the geometry's own bounds
+      // would frustum-cull them all wrongly
+      im.frustumCulled = false
+      for (let i = 0; i < s.count; i++) im.setMatrixAt(i, _dzero)
+      root.add(im)
+      s.meshes.push(im)
+      draws++
+    })
+  }
+  for (const e of entries) {
+    const open = structure.palette[e.b.state].Properties.open === "true"
+    setDoorInstance(e.openIdx, e.openSlot, e.b.pos, open)
+    setDoorInstance(e.closedIdx, e.closedSlot, e.b.pos, !open)
+    doorByCell.set(e.b.pos.join(","), { b: e.b, openIdx: e.openIdx, closedIdx: e.closedIdx, openSlot: e.openSlot, closedSlot: e.closedSlot, pair: null })
   }
   for (const reg of doorByCell.values()) {
     if (!isDoorName(structure.palette[reg.b.state].Name)) continue
     const [x, y, z] = reg.b.pos
     reg.pair = doorByCell.get(x + "," + (y + 1) + "," + z) || doorByCell.get(x + "," + (y - 1) + "," + z) || null
   }
+  return draws
 }
 
-// flip an openable block (and the other door half): swap visibility and
-// repoint its state so collision boxes follow
+// flip an openable block (and the other door half): swap the instance
+// matrices and repoint its state so collision boxes follow
 function toggleDoor(reg) {
   const structure = current.value
   const open = structure.palette[reg.b.state].Properties.open !== "true"
   for (const r of reg.pair ? [reg, reg.pair] : [reg]) {
     r.b.state = open ? r.openIdx : r.closedIdx
-    if (r.gOpen) r.gOpen.visible = open
-    if (r.gClosed) r.gClosed.visible = !open
+    setDoorInstance(r.openIdx, r.openSlot, r.b.pos, open)
+    setDoorInstance(r.closedIdx, r.closedSlot, r.b.pos, !open)
   }
 }
 
@@ -212,11 +252,15 @@ function interact(ox, oy, oz, dx, dy, dz) {
 }
 
 // world-space box of the door being looked at (for the in-reach outline)
+const _aimV = new THREE.Vector3()
 function aimDoor(ox, oy, oz, dx, dy, dz) {
   const reg = rayDoor(ox, oy, oz, dx, dy, dz)
   if (!reg) return null
-  const g = reg.gOpen?.visible ? reg.gOpen : reg.gClosed
-  return g ? _aimBox.setFromObject(g) : null
+  const structure = current.value
+  const open = structure.palette[reg.b.state].Properties.open === "true"
+  const s = doorSlots.get(open ? reg.openIdx : reg.closedIdx)
+  if (!s?.box) return null
+  return _aimBox.copy(s.box).translate(_aimV.set(reg.b.pos[0] * 16, reg.b.pos[1] * 16, reg.b.pos[2] * 16).add(root.position))
 }
 
 // the current structure keeps ownership of its group, animator, textures and
@@ -297,6 +341,7 @@ function disposeGroup(g) {
   if (!g) return
   g.traverse(o => {
     if (!o.isMesh || o.userData.shared) return
+    if (o.isInstancedMesh) o.dispose()
     o.geometry?.dispose()
     for (const m of [].concat(o.material)) m?.dispose?.()
   })
@@ -397,7 +442,7 @@ async function build(structure = source, refit = true, replace = false) {
     sceneApi.contentRoots.add(root)
     if (old) sceneApi.contentRoots.delete(old)
     if (animator) sceneApi.animators.delete(animator)
-    attachDoors(doorEntries)
+    const doorDraws = attachDoors(doorEntries)
     animator = lib.createAnimator(root)
     sceneApi.animators.add(animator)
     sceneApi.remakeGrid()
@@ -406,7 +451,7 @@ async function build(structure = source, refit = true, replace = false) {
       size: `${sx}×${sy}×${sz}`,
       blocks: placedCount,
       palette: templates.size,
-      draws: drawCalls,
+      draws: drawCalls + doorDraws,
       tris
     }
     state.status = ""

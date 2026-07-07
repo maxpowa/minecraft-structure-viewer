@@ -71,11 +71,22 @@ function bakeMesh(scene, o, matrix, caches) {
 }
 
 // bake a live group: world transforms applied, hidden subtrees (the
-// non-showing door half) skipped
+// non-showing door half) skipped. instanced doors bake one mesh per shown
+// instance; zero-scale instances are the hidden state
+const _inst = new THREE.Matrix4(), _instFull = new THREE.Matrix4()
 function bakeGroup(scene, group, caches) {
   group.updateMatrixWorld(true)
   group.traverseVisible(o => {
-    if (o.isMesh) bakeMesh(scene, o, o.matrixWorld, caches)
+    if (!o.isMesh) return
+    if (o.isInstancedMesh) {
+      for (let i = 0; i < o.count; i++) {
+        o.getMatrixAt(i, _inst)
+        if (!_inst.elements[0] && !_inst.elements[5] && !_inst.elements[10]) continue
+        bakeMesh(scene, o, _instFull.multiplyMatrices(o.matrixWorld, _inst), caches)
+      }
+      return
+    }
+    bakeMesh(scene, o, o.matrixWorld, caches)
   })
 }
 
