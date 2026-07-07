@@ -1,10 +1,12 @@
 <script setup>
 import { ref } from "vue"
 import { useSession } from "../composables/useSession.js"
+import { useBuild } from "../composables/useBuild.js"
 import { useLock } from "../composables/useLock.js"
 
 const session = useSession()
 const s = session.state
+const { state: buildState } = useBuild()
 const { locked } = useLock()
 const open = ref(false)
 </script>
@@ -45,6 +47,10 @@ const open = ref(false)
       <button v-else :disabled="locked" @click="session.generate()">
         <span class="material-symbols-outlined">casino</span>
         {{ s.level > 0 ? "Regenerate" : "Generate" }}
+      </button>
+      <button :disabled="locked" @click="buildState.hideStructureBlocks = !buildState.hideStructureBlocks">
+        <span class="material-symbols-outlined">{{ buildState.hideStructureBlocks ? "visibility" : "visibility_off" }}</span>
+        {{ buildState.hideStructureBlocks ? "Show" : "Hide" }}
       </button>
     </div>
     <button class="head" @click="open = !open">
