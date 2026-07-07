@@ -384,7 +384,7 @@ async function build(structure = source, refit = true, replace = false) {
     }
     const optStruct = doorEntries.length ? { ...structure, blocks: structure.blocks.filter(b => !isOpenable(structure.palette[b.state])) } : structure
 
-    const { group: next, atlasTextures: pending, tris } = await optimise(optStruct, templates, position, {
+    const { group: next, atlasTextures: pending, drawCalls, tris } = await optimise(optStruct, templates, position, {
       getCullFaces: opts => lib.getCullFaces({ ...opts, assets }),
       setStatus: s => { state.status = s }
     })
@@ -406,6 +406,7 @@ async function build(structure = source, refit = true, replace = false) {
       size: `${sx}×${sy}×${sz}`,
       blocks: placedCount,
       palette: templates.size,
+      draws: drawCalls,
       tris
     }
     state.status = ""

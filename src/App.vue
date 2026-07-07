@@ -28,7 +28,7 @@ const info = computed(() => {
   const i = buildState.info
   if (!i) return ""
   const name = current.name ? `${current.name} · ` : ""
-  return `${name}${i.size} · ${i.blocks} blocks · ${i.palette} palette entries · ${fmtK(i.tris)} tris`
+  return `${name}${i.size} · ${i.blocks} blocks · ${i.palette} palette entries · ${i.draws} draws · ${fmtK(i.tris)} tris`
 })
 
 onMounted(async () => {
