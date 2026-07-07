@@ -458,11 +458,30 @@ function disposeGroup(g) {
   g.removeFromParent()
 }
 
+// cancelling reverts to whatever was on screen: the flag is checked at every
+// yield point, and abort() undoes the state build() had already claimed
+let cancelBuild = false
+function cancel() {
+  if (!state.building) return
+  cancelBuild = true
+  state.status = "cancelling…"
+}
+
+// returns true when a build landed, false when it was cancelled
 async function build(structure = source, refit = true) {
   const assets = packs.assets.value
   if (!assets || !structure || state.building) return
   state.building = true
+  cancelBuild = false
   lock(true)
+  const prevCurrent = current.value, prevSource = source, prevHasSB = state.hasStructureBlocks
+  const abort = () => {
+    current.value = prevCurrent
+    source = prevSource
+    state.hasStructureBlocks = prevHasSB
+    state.status = ""
+    return false
+  }
   try {
     source = structure
     // whether the show/hide toggle has anything to act on
@@ -519,9 +538,11 @@ async function build(structure = source, refit = true) {
         state.status = `building… ${i + 1}/${structure.blocks.length}`
         state.progress = { phase: "build", done: i + 1, total: structure.blocks.length }
         await new Promise(r => setTimeout(r))
+        if (cancelBuild) return abort()
       }
     }
     state.progress = { phase: "build", done: structure.blocks.length, total: structure.blocks.length }
+    if (cancelBuild) return abort()
 
     // centre, snapped so every block fills a whole grid cell: templates are
     // block-centred, so a centre ≡ 8 (mod 16) keeps blocks on the lattice
@@ -538,6 +559,7 @@ async function build(structure = source, refit = true) {
       await template(openIdx)
       await template(closedIdx)
       doorEntries.push({ b, openIdx, closedIdx })
+      if (cancelBuild) return abort()
     }
 
     // canonical grouping: states whose single variant differs only by
@@ -584,11 +606,14 @@ async function build(structure = source, refit = true) {
 
     const optStruct = doorEntries.length ? { ...structure, blocks: structure.blocks.filter(b => !isOpenable(structure.palette[b.state])) } : structure
 
-    const { group: next, atlasTextures: pending, drawCalls, tris } = await optimise(optStruct, templates, position, {
+    const opt = await optimise(optStruct, templates, position, {
       getCullFaces: opts => lib.getCullFaces({ ...opts, assets }),
       setStatus: s => { state.status = s },
-      setProgress: (done, total) => { state.progress = { phase: "optimise", done, total } }
+      setProgress: (done, total) => { state.progress = { phase: "optimise", done, total } },
+      shouldCancel: () => cancelBuild
     })
+    if (!opt) return abort()
+    const { group: next, atlasTextures: pending, drawCalls, tris } = opt
 
     // atomic swap: show the new group first, then drop the old one + its atlases
     const old = root, oldTex = atlasTextures
@@ -627,6 +652,7 @@ async function build(structure = source, refit = true) {
     state.status = ""
     disposeGroup(old)
     for (const t of oldTex) t.dispose()
+    return true
   } finally {
     state.building = false
     state.progress = null
@@ -660,7 +686,7 @@ const getNonSolid = () => nonSolid
 
 export function useBuild() {
   return {
-    state, current, build, getRoot, getTemplates, getNonSolid,
+    state, current, build, cancel, getRoot, getTemplates, getNonSolid,
     blockAt, blockEntryAt, boxForBlock, interact, aimDoor, currentBoxes, exportCurrent
   }
 }

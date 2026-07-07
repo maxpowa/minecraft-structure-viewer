@@ -130,8 +130,22 @@ function packLoaded() {
   }
 }
 
+// a cancelled build leaves the previous scene up, so the list selection,
+// name and url roll back with it
+function snapshot() {
+  return { loaded, anchor, name: state.name, selected: [...structures.state.selected], url: location.href }
+}
+function restore(snap) {
+  loaded = snap.loaded
+  anchor = snap.anchor
+  state.name = snap.name
+  structures.stateMut.selected = snap.selected
+  history.replaceState(null, "", snap.url)
+}
+
 // rebuild whatever is loaded: one structure gets its session back, several
-// become a packed combination (no sessions, url lists them all)
+// become a packed combination (no sessions, url lists them all).
+// returns false when the build was cancelled
 async function apply(refit = true) {
   if (!loaded.length) return
   if (loaded.length === 1) {
@@ -139,15 +153,15 @@ async function apply(refit = true) {
     state.name = name
     structures.stateMut.selected = rel ? [rel] : []
     if (rel) setVanillaParam(rel)
-    await buildApi.build(s, refit)
+    if (await buildApi.build(s, refit) === false) return false
     await session.startSession(s, name)
   } else {
     state.name = `${loaded.length} structures`
     const rels = loaded.map(e => e.rel)
     structures.stateMut.selected = rels.filter(Boolean)
     setVanillaParam(rels.every(Boolean) ? await encodeRels(rels) : null)
+    if (await buildApi.build(packLoaded(), refit) === false) return false
     session.endSession()
-    await buildApi.build(packLoaded(), refit)
   }
 }
 
@@ -199,6 +213,7 @@ function loadVanilla(rel, ev) {
   const shift = !!ev?.shiftKey && canCombine, ctrl = !!(ev?.ctrlKey || ev?.metaKey) && canCombine
   return withLock(async () => {
     state.error = ""
+    const snap = snapshot()
     try {
       const order = visualOrder()
       if (shift && anchor != null && anchor !== rel && order.has(anchor) && order.has(rel)) {
@@ -230,7 +245,7 @@ function loadVanilla(rel, ev) {
         loaded = [{ structure: s, name: rel, rel }]
         anchor = rel
       }
-      await apply()
+      if (await apply() === false) restore(snap)
     } catch (err) {
       state.error = `couldn't load structure: ${err}`
     }
@@ -242,6 +257,7 @@ function loadMany(rels) {
   if (locked.value) return
   return withLock(async () => {
     state.error = ""
+    const snap = snapshot()
     try {
       const entries = []
       for (const rel of new Set(rels)) {
@@ -252,7 +268,7 @@ function loadMany(rels) {
       loaded = entries
       sortLoaded(visualOrder())
       anchor = loaded.at(-1)?.rel ?? null
-      await apply()
+      if (await apply() === false) restore(snap)
     } catch (err) {
       state.error = `couldn't load structures: ${err}`
     }
@@ -266,13 +282,14 @@ function loadDebug(kind) {
   kind = kind && kind !== "1" ? kind : ""
   return withLock(async () => {
     state.error = ""
+    const snap = snapshot()
     const name = kind ? `debug (${kind})` : "debug"
     setVanillaParam(null)
     const u = new URL(location)
     u.searchParams.set("debug", kind || "1")
     history.replaceState(null, "", u)
     loaded = [{ structure: makeDebug(kind), name }]
-    await apply()
+    if (await apply() === false) restore(snap)
   })
 }
 
@@ -280,12 +297,13 @@ function loadFile(file) {
   if (!file || locked.value) return
   return withLock(async () => {
     state.error = ""
+    const snap = snapshot()
     try {
       const reader = READERS[file.name.split(".").pop().toLowerCase()] ?? readStructure
       const s = await reader(await file.arrayBuffer())
       setVanillaParam(null)
       loaded = [{ structure: s, name: file.name.replace(/\.(nbt|litematic|schem|mcstructure)$/i, "") }]
-      await apply()
+      if (await apply() === false) restore(snap)
     } catch (err) {
       state.error = `couldn't read ${file.name}: ${err}`
     }

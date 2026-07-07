@@ -236,7 +236,7 @@ function appendGroup(geo, start, count, mat, nmat, rect, W, H, acc) {
   }
 }
 
-export async function optimise(structure, templates, position, { getCullFaces, setStatus, setProgress }) {
+export async function optimise(structure, templates, position, { getCullFaces, setStatus, setProgress, shouldCancel }) {
   setStatus?.("optimising…")
   setProgress?.(0, structure.blocks.length)
   tiledCache.clear()
@@ -431,6 +431,7 @@ export async function optimise(structure, templates, position, { getCullFaces, s
       setStatus?.(`optimising… ${i + 1}/${structure.blocks.length}`)
       setProgress?.(i + 1, structure.blocks.length)
       await new Promise(r => setTimeout(r))
+      if (shouldCancel?.()) return null // caller reverts; nothing GPU-side exists yet
     }
   }
 

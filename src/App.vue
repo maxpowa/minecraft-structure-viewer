@@ -25,7 +25,7 @@ const canvasEl = ref(null)
 const { loadBase } = usePacks()
 const structures = useStructures()
 const { state: current, structure, loadVanilla, loadMany, loadDebug } = useStructure()
-const { state: buildState } = useBuild()
+const { state: buildState, cancel: cancelBuild } = useBuild()
 const sceneApi = useScene()
 const walk = useWalk()
 const walkState = walk.state
@@ -91,6 +91,10 @@ onMounted(async () => {
         <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
         <div v-else-if="info" class="chip">{{ info }}</div>
         <LevelMenu />
+        <button v-if="buildState.building" class="cancel-btn" @click="cancelBuild()">
+          <span class="material-symbols-outlined">close</span>
+          Cancel
+        </button>
         <button class="walk-btn" :disabled="locked || !buildState.info" @click="walk.enter()">
           <span class="material-symbols-outlined">directions_walk</span>
           Walk Around
@@ -179,4 +183,19 @@ onMounted(async () => {
 }
 
 .walk-btn .material-symbols-outlined { font-size: 18px; }
+
+.cancel-btn {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cancel-btn .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--red);
+}
 </style>
