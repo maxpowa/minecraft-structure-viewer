@@ -13,6 +13,7 @@ let nextId = 1
 
 const state = reactive({
   channel: new URLSearchParams(location.search).get("channel") === "snapshot" ? "snapshot" : "release",
+  version: new URLSearchParams(location.search).get("version") || "", // exact id pin, beats the channel
   baseId: "",
   baseStatus: "loading…",
   baseFailed: false,
@@ -32,6 +33,7 @@ const setSwapHandler = fn => { swapHandler = fn }
 const setChannelParam = ch => {
   const u = new URL(location)
   ch === "snapshot" ? u.searchParams.set("channel", "snapshot") : u.searchParams.delete("channel")
+  u.searchParams.delete("version") // picking a channel unpins
   history.replaceState(null, "", u)
 }
 
@@ -61,7 +63,7 @@ async function loadBase(swap) {
     const mb = n => (n / 1048576).toFixed(0)
     const r = await loadMojangJar(state.channel, (got, total, ver) => {
       state.baseStatus = `downloading ${ver}… ${mb(got)}/${mb(total)}MB`
-    })
+    }, state.version)
     baseBytes = r.bytes
     state.baseId = r.id
     state.baseStatus = ""
@@ -69,7 +71,7 @@ async function loadBase(swap) {
     console.warn("couldn't load the vanilla jar:", err)
     baseBytes = null
     state.baseId = ""
-    state.baseStatus = "vanilla download failed"
+    state.baseStatus = /^version not found/.test(err?.message) ? err.message : "vanilla download failed"
     state.baseFailed = true
   }
   try {
@@ -81,8 +83,9 @@ async function loadBase(swap) {
 }
 
 async function setChannel(channel, swap) {
-  if (state.busy || locked.value || channel === state.channel) return
+  if (state.busy || locked.value || (channel === state.channel && !state.version)) return
   state.channel = channel
+  state.version = ""
   setChannelParam(channel)
   await loadBase(swap)
 }

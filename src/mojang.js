@@ -1,18 +1,22 @@
-// Latest vanilla client jar from Mojang, "release" or "snapshot" channel.
-// Mojang's hosts send no CORS headers, so everything goes through the proxy.
-// Each channel's jar is cached in Cache Storage under its own key, so the two
-// channels never evict each other; stale versions of a channel are cleaned up.
+// Vanilla client jar from Mojang: the "release" or "snapshot" channel's
+// latest, or an exact version id when one is pinned (?version=). Mojang's
+// hosts send no CORS headers, so everything goes through the proxy.
+// Each channel's jar is cached in Cache Storage under its own key (pinned
+// versions get their own bucket), so they never evict each other; stale
+// versions within a bucket are cleaned up.
 const CORS = "https://cors.ewanhowell.com/"
 const MANIFEST = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
 const KEY = "https://mc-jar.cache/"
 
-export async function loadMojangJar(channel = "release", onProgress) {
+export async function loadMojangJar(channel = "release", onProgress, version) {
   const manifest = await fetch(CORS + MANIFEST).then(r => r.json())
-  const id = manifest.latest[channel]
+  const id = version || manifest.latest[channel]
   const ver = manifest.versions.find(v => v.id === id)
+  if (!ver) throw new Error(`version not found: ${id}`)
   const { url, size } = (await fetch(CORS + ver.url).then(r => r.json())).downloads.client
 
-  const key = `${KEY}${channel}/${id}`, mine = `${KEY}${channel}/`
+  const bucket = version ? "pinned" : channel
+  const key = `${KEY}${bucket}/${id}`, mine = `${KEY}${bucket}/`
   const cache = await caches.open("mc-client-jars")
   for (const k of await cache.keys()) {
     if (!k.url.startsWith(KEY)) await cache.delete(k)

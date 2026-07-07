@@ -18,9 +18,9 @@ function onFiles(e) {
   <section>
     <h2>Packs</h2>
     <div class="channel">
-      <button :class="{ active: state.channel === 'release' }" :disabled="busy"
+      <button :class="{ active: !state.version && state.channel === 'release' }" :disabled="busy"
         @click="setChannel('release')">Release</button>
-      <button :class="{ active: state.channel === 'snapshot' }" :disabled="busy"
+      <button :class="{ active: !state.version && state.channel === 'snapshot' }" :disabled="busy"
         @click="setChannel('snapshot')">Snapshot</button>
     </div>
     <div class="pack-list">
