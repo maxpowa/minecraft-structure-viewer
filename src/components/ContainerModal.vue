@@ -386,7 +386,7 @@ button.icon {
 .pane.data { gap: 8px; }
 
 .blurb {
-  margin: 0 2px;
+  margin: 0 2px 6px;
   color: var(--text-dim);
   font-size: 12.5px;
   line-height: 1.55;
