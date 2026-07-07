@@ -16,7 +16,7 @@ const matAnimated = m => !!(m.uniforms?.GameTime || matMap(m)?.userData?.frames)
 function matSignature(m) {
   if (m.uniforms) { // library shader material: group by every setting but the map
     const u = m.uniforms
-    return ["shader", m.side, u.shadeEnabled?.value, u.d0?.value, u.d1?.value, u.ambient?.value,
+    return ["shader", m.side, u.shadeEnabled?.value, u.shadeOverride?.value?.toArray().join(","), u.d0?.value, u.d1?.value, u.ambient?.value,
       u.light0?.value?.toArray().join(","), u.light1?.value?.toArray().join(",")].join("|")
   }
   return [m.type, m.side].join("|")
