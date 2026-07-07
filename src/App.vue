@@ -12,6 +12,7 @@ import StructuresSection from "./components/StructuresSection.vue"
 import ViewSection from "./components/ViewSection.vue"
 import LevelMenu from "./components/LevelMenu.vue"
 import WalkOverlay from "./components/WalkOverlay.vue"
+import FpsCounter from "./components/FpsCounter.vue"
 
 const libError = ref("")
 const canvasEl = ref(null)
@@ -80,6 +81,7 @@ onMounted(async () => {
         <LevelMenu />
       </template>
       <WalkOverlay />
+      <FpsCounter />
     </main>
   </div>
 </template>

@@ -97,9 +97,15 @@ function fit() {
   controls.update()
 }
 
+// compare against the tracked CSS size, NOT canvas.width: that's the buffer
+// size (css * pixelRatio), so the old check mismatched every frame and
+// re-ran setSize per frame
+let sizeW = 0, sizeH = 0
 function resize() {
   const w = canvas.clientWidth, h = canvas.clientHeight
-  if (w !== canvas.width || h !== canvas.height) {
+  if (w !== sizeW || h !== sizeH) {
+    sizeW = w
+    sizeH = h
     renderer.setSize(w, h, false)
     updateProjection()
   }
@@ -151,6 +157,7 @@ export function useScene() {
     contentRoots, animators, perspCam, FOV, updateProjection, setWalkUpdate,
     get camera() { return camera },
     get controls() { return controls },
-    get canvas() { return canvas }
+    get canvas() { return canvas },
+    get renderer() { return renderer }
   }
 }
