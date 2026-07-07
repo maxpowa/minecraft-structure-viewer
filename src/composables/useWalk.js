@@ -183,7 +183,12 @@ function stepMove(ax, d, grounded) {
   if (!collideAxis(ax, d) && !isStuck()) {
     if (collideAxis("y", -STEP)) walk.onGround = true
     walk.vel.y = 0
-    stepSmooth = Math.min(STEP, stepSmooth + walk.pos.y - y0)
+    // the partial-tick lerp must not replay the step (stepSmooth already
+    // eases the eye up from the old height): both at once dips the camera
+    // half a block for a frame on every stair
+    const raise = walk.pos.y - y0
+    walk.prev.y += raise
+    stepSmooth = Math.min(STEP, stepSmooth + raise)
     return false
   }
   walk.pos.y = y0
