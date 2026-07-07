@@ -326,14 +326,29 @@ function boxForBlock(b) {
   return _aimBox
 }
 
-// box of the interactable being looked at (in-reach outline)
+// box of the interactable being looked at (in-reach outline). doors and
+// trapdoors follow their model box, which IS the vanilla 3px panel shape;
+// fence gates use the vanilla shape (full width, 4px thick band centred on
+// the facing axis, 13 tall in a wall, same whether open or closed)
 const _aimV = new THREE.Vector3()
 function aimDoor(ox, oy, oz, dx, dy, dz) {
   const h = rayHit(ox, oy, oz, dx, dy, dz)
   if (!h) return null
   if (h.container) return boxForBlock(h.container)
   const b = h.door.b
-  const open = current.value.palette[b.state].Properties.open === "true"
+  const e = current.value.palette[b.state]
+  if (/fence_gate$/.test((e.Name || "").replace(/^minecraft:/, ""))) {
+    const bx = b.pos[0] * 16 + root.position.x - 8
+    const by = b.pos[1] * 16 + root.position.y - 8
+    const bz = b.pos[2] * 16 + root.position.z - 8
+    const tall = e.Properties?.in_wall === "true" ? 13 : 16
+    const [x0, z0, x1, z1] = e.Properties?.facing === "north" || e.Properties?.facing === "south"
+      ? [0, 6, 16, 10] : [6, 0, 10, 16]
+    _aimBox.min.set(bx + x0, by, bz + z0)
+    _aimBox.max.set(bx + x1, by + tall, bz + z1)
+    return _aimBox
+  }
+  const open = e.Properties.open === "true"
   const box = boxForState(open ? h.door.openIdx : h.door.closedIdx)
   if (!box) return null
   return _aimBox.copy(box).translate(_aimV.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16).add(root.position))
