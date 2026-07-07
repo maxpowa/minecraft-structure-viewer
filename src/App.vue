@@ -6,6 +6,7 @@ import { useStructures } from "./composables/useStructures.js"
 import { useStructure } from "./composables/useStructure.js"
 import { useBuild } from "./composables/useBuild.js"
 import { useScene } from "./composables/useScene.js"
+import { useLock } from "./composables/useLock.js"
 import { useWalk } from "./composables/useWalk.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
@@ -21,7 +22,9 @@ const structures = useStructures()
 const { state: current, structure, loadVanilla, loadDebug } = useStructure()
 const { state: buildState } = useBuild()
 const sceneApi = useScene()
-const { state: walkState } = useWalk()
+const walk = useWalk()
+const walkState = walk.state
+const { locked } = useLock()
 
 const fmtK = n => n >= 1000 ? +(n / 1000).toFixed(1) + "K" : String(Math.round(n))
 
@@ -79,6 +82,10 @@ onMounted(async () => {
         <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
         <div v-else-if="info" class="chip">{{ info }}</div>
         <LevelMenu />
+        <button class="walk-btn" :disabled="locked || !buildState.info" @click="walk.enter()">
+          <span class="material-symbols-outlined">directions_walk</span>
+          Walk Around
+        </button>
       </template>
       <WalkOverlay />
       <FpsCounter />
@@ -149,4 +156,16 @@ onMounted(async () => {
 }
 
 .chip.error { color: var(--red); }
+
+.walk-btn {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #000000a0;
+}
+
+.walk-btn .material-symbols-outlined { font-size: 18px; }
 </style>
