@@ -6,6 +6,7 @@ import { useStructures } from "./composables/useStructures.js"
 import { useStructure } from "./composables/useStructure.js"
 import { useBuild } from "./composables/useBuild.js"
 import { useScene } from "./composables/useScene.js"
+import { useWalk } from "./composables/useWalk.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
 import ViewSection from "./components/ViewSection.vue"
@@ -19,6 +20,7 @@ const structures = useStructures()
 const { state: current, structure, loadVanilla } = useStructure()
 const { state: buildState } = useBuild()
 const sceneApi = useScene()
+const { state: walkState } = useWalk()
 
 const fmtK = n => n >= 1000 ? +(n / 1000).toFixed(1) + "K" : String(Math.round(n))
 
@@ -67,10 +69,13 @@ onMounted(async () => {
     </aside>
     <main class="viewport">
       <canvas id="view" ref="canvasEl"></canvas>
-      <div v-if="current.error" class="chip error">{{ current.error }}</div>
-      <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
-      <div v-else-if="info" class="chip">{{ info }}</div>
-      <LevelMenu />
+      <!-- walking hides the viewport chrome: only the crosshair + hint show -->
+      <template v-if="!walkState.on">
+        <div v-if="current.error" class="chip error">{{ current.error }}</div>
+        <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
+        <div v-else-if="info" class="chip">{{ info }}</div>
+        <LevelMenu />
+      </template>
       <WalkOverlay />
     </main>
   </div>

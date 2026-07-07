@@ -20,7 +20,7 @@ addEventListener("resize", () => { if (state.on) place() })
 <template>
   <template v-if="state.on">
     <div class="crosshair" :style="pos"></div>
-    <div class="hint">
+    <div class="hint" :style="{ left: pos.left }">
       <b>WASD</b> move · <b>mouse</b> look · <b>click</b> open door · <b>space</b> jump · <b>2×space</b> fly ·
       <b>N</b> noclip · <b>shift</b> down/sneak · <b>ctrl/Q/2×W</b> sprint · <b>esc</b> exit
     </div>
@@ -45,7 +45,6 @@ addEventListener("resize", () => { if (state.on) place() })
 
 .hint {
   position: fixed;
-  left: 50%;
   bottom: 18px;
   transform: translateX(-50%);
   background: #000000aa;
