@@ -22,7 +22,7 @@ const state = reactive({
 
 // name -> real zip path (the folder may be structure or structures)
 let structPath = new Map()
-let starterSet = null, standaloneSet = null, structDepth = null
+let starterSet = null, standaloneSet = null, structDepth = null, structRadius = null
 let worldgenPromise = null
 
 async function populate() {
@@ -66,13 +66,21 @@ function computeWorldgen() {
     const PR = /^data\/([^/]+)\/worldgen\/template_pool\/(.+)\.json$/
     const nsify = ref => typeof ref === "string" ? ref.replace(":", "/") : ref
     const keys = [...await allZipKeys()]
-    const startPoolDepth = new Map()
+    const startPoolDepth = new Map(), startPoolRadius = new Map()
     for (const p of keys) {
       const m = p.match(SR); if (!m) continue
       const j = await readJson(p)
-      if (typeof j?.start_pool === "string") startPoolDepth.set(nsify(j.start_pool), typeof j.size === "number" ? j.size : 7)
+      if (typeof j?.start_pool === "string") {
+        const sp = nsify(j.start_pool)
+        // max_distance_from_center is a plain number or, in newer formats,
+        // { horizontal, vertical }; 80 was the default when it was optional
+        const md = j.max_distance_from_center
+        const r = typeof md === "number" ? md : typeof md?.horizontal === "number" ? md.horizontal : 80
+        startPoolDepth.set(sp, typeof j.size === "number" ? j.size : 7)
+        startPoolRadius.set(sp, r)
+      }
     }
-    const childRef = new Set(), startMembers = new Set(), depth = new Map()
+    const childRef = new Set(), startMembers = new Set(), depth = new Map(), radius = new Map()
     const locs = j => {
       const out = []
       for (const e of j?.elements || []) {
@@ -86,7 +94,11 @@ function computeWorldgen() {
       const m = p.match(PR); if (!m) continue
       const name = m[1] + "/" + m[2], j = await readJson(p)
       if (startPoolDepth.has(name)) {
-        for (const l of locs(j)) { depth.set(l, startPoolDepth.get(name)); startMembers.add(l) }
+        for (const l of locs(j)) {
+          depth.set(l, startPoolDepth.get(name))
+          radius.set(l, startPoolRadius.get(name))
+          startMembers.add(l)
+        }
       } else {
         for (const l of locs(j)) childRef.add(l)
       }
@@ -96,6 +108,7 @@ function computeWorldgen() {
     const procEntry = new Set(PROC.map(p => p.entry))
     standaloneSet = new Set([...starterSet].filter(n => !startMembers.has(n) && !procEntry.has(n)))
     structDepth = depth
+    structRadius = radius
     state.worldgenReady = true
   })()
   return worldgenPromise
@@ -105,7 +118,7 @@ async function refresh() {
   state.indexing = true
   try {
     worldgenPromise = null
-    starterSet = standaloneSet = structDepth = null
+    starterSet = standaloneSet = structDepth = structRadius = null
     state.worldgenReady = false
     await populate()
     if (state.filterMode !== "all") await computeWorldgen()
@@ -132,7 +145,8 @@ function visibleNames() {
 const zipPathOf = name => structPath.get(name)
 const has = name => structPath.has(name)
 const getStructDepth = name => structDepth?.get(name)
+const getStructRadius = name => structRadius?.get(name)
 
 export function useStructures() {
-  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, visibleNames, zipPathOf, has, getStructDepth }
+  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, visibleNames, zipPathOf, has, getStructDepth, getStructRadius }
 }

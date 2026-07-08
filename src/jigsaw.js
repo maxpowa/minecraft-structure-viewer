@@ -110,5 +110,5 @@ export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, max
   // look-ahead consumed a dry frontier, and the caller flags a depth cap
   // (keepJigsaws false), where generation is over regardless
   if (!exhausted && keepJigsaws) for (const p of pieces) if (p.depth === depth) p.keepJigsaws = true
-  return { structure: combine(pieces), pieces: pieces.length, depth, exhausted }
+  return { structure: combine(pieces), pieces: pieces.length, depth, exhausted, capped: pieces.length >= maxPieces }
 }
