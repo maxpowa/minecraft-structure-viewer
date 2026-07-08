@@ -21,7 +21,7 @@ const scene = new THREE.Scene()
 // faces poking through each other). walking can't get closer than ~4 units
 // to a surface, so nothing visible ever clips
 const perspCam = new THREE.PerspectiveCamera(FOV, 1, 2, 5000)
-perspCam.position.set(60, 45, 60)
+perspCam.position.set(-68, 50, -68)
 const orthoCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 5000)
 let camera = perspCam
 let controls = null
@@ -265,8 +265,7 @@ function fit() {
   const dist = radius / Math.tan(THREE.MathUtils.degToRad(FOV / 2)) * 1.1
   camera.up.set(0, 1, 0)
   camera.zoom = 1
-  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(THREE.MathUtils.degToRad(30), THREE.MathUtils.degToRad(225), 0, "XYZ")).invert()
-  camera.position.copy(sphere.center).add(new THREE.Vector3(0, 0, dist).applyQuaternion(q))
+  camera.position.copy(sphere.center).addScaledVector(new THREE.Vector3(-34, 25, -34).normalize(), dist)
   controls.target.copy(sphere.center)
   camera.lookAt(sphere.center)
   orthoHalfH = radius * 1.1
