@@ -2,6 +2,7 @@
 // behind anything; toggle wireframe to see whether a run merges into one quad.
 // Each row is a case the mesher should handle. ?debug=fluid renders just the
 // water levels row for eyeballing surface heights against the game.
+// ?debug=aquarium is a glass tank of water for translucency testing.
 export function makeDebug(kind) {
   const palette = [], pi = new Map()
   function st(Name, Properties = {}) {
@@ -123,6 +124,27 @@ export function makeDebug(kind) {
 
     return finish()
   }
+
+  if (kind === "aquarium") {
+    // glass tank on grass: sand bed, two blocks of water, a waterlogged sea
+    // pickle in the middle. every translucent case at once: water seen
+    // through glass, glass through water, water through water, and the
+    // surface from above and below
+    for (let x = 0; x <= 6; x++) for (let z = 0; z <= 6; z++) put(x, 0, z, "grass_block")
+    put(0, 1, 0, "dandelion")
+    put(6, 1, 6, "dandelion")
+    for (let x = 1; x <= 5; x++) for (let z = 1; z <= 5; z++) {
+      const wall = x === 1 || x === 5 || z === 1 || z === 5
+      put(x, 1, z, wall ? "glass" : "sand")
+      for (const y of [2, 3]) {
+        if (wall) put(x, y, z, "glass")
+        else if (x === 3 && y === 2 && z === 3) put(x, y, z, "sea_pickle", { pickles: "4", waterlogged: "true" })
+        else put(x, y, z, "water", { level: "0" })
+      }
+    }
+    return finish()
+  }
+
   // different models, same texture, coplanar 16x16 tops: should all merge
   put(0, 0, 0, "cobblestone"); put(1, 0, 0, "cobblestone_slab", { type: "double" })
   put(2, 0, 0, "cobblestone"); put(3, 0, 0, "cobblestone_slab", { type: "double" }); put(4, 0, 0, "cobblestone")
