@@ -9,6 +9,7 @@ import { exportScene } from "../export.js"
 import { makeSignTexts } from "../signs.js"
 import { JIGSAW, parseState } from "../transforms.js"
 import { isInspectable } from "../loot.js"
+import { getFont, measure, drawText } from "../mcfont.js"
 
 const packs = usePacks()
 const sceneApi = useScene()
@@ -139,6 +140,8 @@ let animator = null
 let templates = null
 let nonSolid = new Set()
 let atlasTextures = [] // the displayed atlases; swapped + disposed on rebuild
+let entityMarkers = [] // billboarded entities: { e, x, y, z } in root-local coords
+let markerTextures = []
 let doorByCell = new Map()
 let blockMap = null, blockMapFor = null
 
@@ -257,10 +260,46 @@ function attachDoors(entries) {
 // structure entities whose id also resolves as a block (the cushion
 // overrides, straw-bed-style blocks) render as live models at the entity's
 // exact position: no cull faces, never a neighbour to anything, no collision.
-// yaw snaps to the nearest cardinal like the game's Direction.fromYRot
+// yaw snaps to the nearest cardinal like the game's Direction.fromYRot.
+// everything else gets a billboarded spawn-egg marker inside a fixed
+// 14x14x14 hitbox so its existence and nbt are visible/clickable
+const ENTITY_BOX = 14
+
+async function entityMarkerTexture(lib, assets, name) {
+  const c = document.createElement("canvas")
+  c.width = 64
+  c.height = 64
+  let drawn = false
+  for (const item of [name + "_spawn_egg", name]) {
+    try {
+      if (!await lib.readFile(`assets/minecraft/items/${item}.json`, assets)) continue
+      await lib.renderItem({ id: item, assets, width: 64, height: 64, canvas: c })
+      drawn = true
+      break
+    } catch {}
+  }
+  if (!drawn) {
+    try {
+      const font = await getFont()
+      const ctx = c.getContext("2d")
+      const s = 6
+      const x = Math.round((64 - measure(font, "?") * s) / 2)
+      const y = Math.round((64 - font.ch * s) / 2)
+      drawText(ctx, font, "?", x + s, y + s, { scale: s, color: "#3f3f3f" })
+      drawText(ctx, font, "?", x, y, { scale: s, color: "#ffffff" })
+    } catch { return null }
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  tex.magFilter = THREE.NearestFilter
+  return tex
+}
+
 async function attachEntities(structure, lib, assets) {
   let draws = 0
   const groupCache = new Map()
+  const texCache = new Map()
+  entityMarkers = []
   for (const e of structure.entities ?? []) {
     const id = e.nbt?.id
     if (typeof id !== "string") continue
@@ -285,15 +324,61 @@ async function attachEntities(structure, lib, assets) {
       } catch {}
       groupCache.set(key, template)
     }
-    if (!template) continue
-    const g = groupCache.get(key).clone()
     // block units -> world: cell centres sit at pos*16, cells span +-8, so a
     // point maps to pos*16 - 8; the template's bottom is -8, hence y stays
-    g.position.set(e.pos[0] * 16 - 8, e.pos[1] * 16, e.pos[2] * 16 - 8)
-    root.add(g)
-    g.traverse(o => { if (o.isMesh) draws++ })
+    const wx = e.pos[0] * 16 - 8, wy = e.pos[1] * 16, wz = e.pos[2] * 16 - 8
+    if (template) {
+      const g = groupCache.get(key).clone()
+      g.position.set(wx, wy, wz)
+      root.add(g)
+      g.traverse(o => { if (o.isMesh) draws++ })
+      continue
+    }
+    if (!texCache.has(name)) texCache.set(name, await entityMarkerTexture(lib, assets, name))
+    const tex = texCache.get(name)
+    // opaque pass + alpha test, not transparent: a blended sprite writes
+    // depth for its empty pixels (holes in water) and sorts against other
+    // transparents by centre distance (pops in front from behind). unlike
+    // every other material, SpriteMaterial defaults transparent to TRUE, so
+    // it must be forced off explicitly
+    const mat = tex
+      ? new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5, transparent: false })
+      : new THREE.SpriteMaterial({ color: 0xffffff, opacity: 0.4 })
+    const spr = new THREE.Sprite(mat)
+    spr.scale.set(10, 10, 1)
+    spr.position.set(wx, wy - 8 + ENTITY_BOX / 2, wz)
+    const marker = { e, x: wx, y: wy - 8, z: wz }
+    root.add(spr)
+    entityMarkers.push(marker)
+    draws++
   }
+  for (const tex of texCache.values()) if (tex) markerTextures.push(tex)
   return draws
+}
+
+// the fixed hitbox anchored at the entity's feet
+function boxForEntity(m) {
+  _aimBox.min.set(m.x - ENTITY_BOX / 2, m.y, m.z - ENTITY_BOX / 2)
+  _aimBox.max.set(m.x + ENTITY_BOX / 2, m.y + ENTITY_BOX, m.z + ENTITY_BOX / 2)
+  _aimBox.translate(root.position)
+  return _aimBox
+}
+
+// nearest entity hitbox along a picking ray, ignoring anything past maxDist
+// (a mesh hit in front). the sprite quad itself never decides the hit
+const _markerV = new THREE.Vector3()
+function markerUnderRay(ray, maxDist) {
+  let best = null, bestD = maxDist
+  for (const m of entityMarkers) {
+    const p = ray.intersectBox(boxForEntity(m), _markerV)
+    if (!p) continue
+    const d = p.distanceTo(ray.origin)
+    if (d < bestD) {
+      bestD = d
+      best = m
+    }
+  }
+  return best
 }
 
 // flip an openable block (and the other door half): swap the instance
@@ -363,6 +448,15 @@ function rayHit(ox, oy, oz, dx, dy, dz) {
     const t = rayBoxT(ox, oy, oz, dx, dy, dz, cx + s[0], cy + s[1], cz + s[2], cx + s[3], cy + s[4], cz + s[5])
     return t != null && t <= REACH
   }
+  let entT = Infinity, entM = null
+  for (const m of entityMarkers) {
+    const b = boxForEntity(m)
+    const t = rayBoxT(ox, oy, oz, dx, dy, dz, b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z)
+    if (t != null && t <= REACH && t < entT) {
+      entT = t
+      entM = m
+    }
+  }
   let last = ""
   for (let t = 0; t <= REACH; t += 2) {
     const [bx, by, bz] = cellOf(ox + dx * t, oy + dy * t, oz + dz * t)
@@ -371,30 +465,33 @@ function rayHit(ox, oy, oz, dx, dy, dz) {
     last = key
     const reg = doorByCell.get(key)
     if (reg) {
-      if (shapeT(bx, by, bz, structure.palette[reg.b.state])) return { door: reg }
+      if (shapeT(bx, by, bz, structure.palette[reg.b.state])) return entT < t ? { entity: entM } : { door: reg }
       continue
     }
     const i = idx.get(key)
     if (i == null) continue
     const b = structure.blocks[i]
-    if ((isInspectable(structure.palette[b.state]?.Name) || b.nbt?.LootTable) && shapeT(bx, by, bz, structure.palette[b.state])) return { container: b }
+    if ((isInspectable(structure.palette[b.state]?.Name) || b.nbt?.LootTable) && shapeT(bx, by, bz, structure.palette[b.state])) {
+      return entT < t ? { entity: entM } : { container: b }
+    }
     const cx = bx * 16 + rx, cy = by * 16 + ry, cz = bz * 16 + rz
     for (const s of collisionBoxes(b.state)) {
       const th = rayBoxT(ox, oy, oz, dx, dy, dz, s[0] + cx, s[1] + cy, s[2] + cz, s[3] + cx, s[4] + cy, s[5] + cz)
-      if (th != null && th <= REACH) return null
+      if (th != null && th <= REACH) return entT < th ? { entity: entM } : null
     }
   }
-  return null
+  return entM ? { entity: entM } : null
 }
 
-// act on the block being looked at: toggles a door (true), hands back a
-// loot container block, or false when there is nothing in reach
+// act on the thing being looked at: toggles a door (true), hands back a
+// loot container block or { entity }, or false when nothing is in reach
 function interact(ox, oy, oz, dx, dy, dz) {
   const h = rayHit(ox, oy, oz, dx, dy, dz)
   if (h?.door) {
     toggleDoor(h.door)
     return true
   }
+  if (h?.entity) return { entity: h.entity.e }
   return h?.container ?? false
 }
 
@@ -448,7 +545,9 @@ function boxForBlock(b) {
 // box of the interactable being looked at (in-reach outline)
 function aimDoor(ox, oy, oz, dx, dy, dz) {
   const h = rayHit(ox, oy, oz, dx, dy, dz)
-  return h ? boxForBlock(h.door ? h.door.b : h.container) : null
+  if (!h) return null
+  if (h.entity) return boxForEntity(h.entity)
+  return boxForBlock(h.door ? h.door.b : h.container)
 }
 
 // the raw structure block at a world position (orbit-mode picking)
@@ -680,9 +779,10 @@ async function build(structure = source, refit = true) {
     const { group: next, atlasTextures: pending, drawCalls, tris } = opt
 
     // atomic swap: show the new group first, then drop the old one + its atlases
-    const old = root, oldTex = atlasTextures
+    const old = root, oldTex = atlasTextures, oldMarkerTex = markerTextures
     root = next
     atlasTextures = pending
+    markerTextures = []
     sceneApi.scene.add(root)
     sceneApi.contentRoots.add(root)
     if (old) sceneApi.contentRoots.delete(old)
@@ -721,6 +821,7 @@ async function build(structure = source, refit = true) {
     state.status = ""
     disposeGroup(old)
     for (const t of oldTex) t.dispose()
+    for (const t of oldMarkerTex) t.dispose()
     return true
   } finally {
     state.building = false
@@ -756,6 +857,6 @@ const getNonSolid = () => nonSolid
 export function useBuild() {
   return {
     state, current, build, cancel, getRoot, getTemplates, getNonSolid,
-    blockAt, blockEntryAt, boxForBlock, interact, aimDoor, currentBoxes, exportCurrent
+    blockAt, blockEntryAt, boxForBlock, boxForEntity, markerUnderRay, interact, aimDoor, currentBoxes, exportCurrent
   }
 }

@@ -621,7 +621,10 @@ addEventListener("mousedown", e => {
   perspCam.getWorldDirection(d)
   const r = buildApi.interact(perspCam.position.x, perspCam.position.y, perspCam.position.z, d.x, d.y, d.z)
   if (r === true) buildCollision()
-  else if (r) {
+  else if (r?.entity) {
+    suspend()
+    containerApi.openEntity(r.entity)
+  } else if (r) {
     suspend()
     containerApi.open(r)
   }

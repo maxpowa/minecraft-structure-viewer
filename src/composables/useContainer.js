@@ -169,6 +169,107 @@ function jigsawBlurb(p, nbt) {
   return `Places a random piece from the pool ${where}, joined at that piece's "${target}" jigsaw.${joint}`
 }
 
+// a billboarded structure entity: identity facts plus its raw nbt
+// the game saves these entity fields unconditionally even when they still
+// hold the spawn default. only defaults that are the same for every mob,
+// modded ones included, get to hide a value (checked against the decompiled
+// save/read code, old and new key names). per-mob values like attribute
+// bases and max air stay in the output; Health qualifies because its spawn
+// default is "equals the max_health base saved in the same compound"
+const NBT_ZERO_DEFAULTS = new Set([
+  "HurtTime", "DeathTime", "HurtByTimestamp", "AbsorptionAmount", "FallFlying",
+  "Invulnerable", "PortalCooldown", "fall_distance", "FallDistance", "OnGround",
+  "InLove", "Age", "ForcedAge", "AgeLocked", "CanPickUpLoot", "PersistenceRequired",
+  "LeftHanded", "NoAI", "Leashed", "Dimension", "Sitting",
+  "current_impulse_context_reset_grace_time"
+])
+const emptyObj = v => !!v && typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length
+const vanillaDropChance = v => typeof v === "number" && Math.abs(v - 0.085) < 1e-6
+const near = (a, b) => a === b || Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(a), Math.abs(b))
+
+// attributes no vanilla mob ever overrides (checked across every supplier in
+// the decompiled source), keyed by id with the registry default. a saved
+// base equal to its registry default says nothing; anything else, including
+// unknown or modded ids, stays
+const ATTR_REGISTRY_DEFAULTS = {
+  armor_toughness: 0, max_absorption: 0, scale: 1, gravity: 0.08,
+  entity_interaction_range: 3, oxygen_bonus: 0, burning_time: 1,
+  explosion_knockback_resistance: 0, water_movement_efficiency: 0,
+  movement_efficiency: 0, waypoint_transmit_range: 0, bounciness: 0,
+  air_drag_modifier: 1, friction_modifier: 1, name_tag_distance: 64,
+  below_name_distance: 10, spawn_reinforcements: 0
+}
+
+// old saves name attributes generic.maxHealth / minecraft:generic.max_health /
+// zombie.spawnReinforcements; normalise them to the current snake_case ids
+function attrId(s) {
+  s = stripNs(String(s ?? ""))
+  s = s.slice(s.indexOf(".") + 1)
+  return s.replace(/[A-Z]/g, c => "_" + c.toLowerCase())
+}
+
+function filterDefaultNbt(nbt) {
+  const attrs = nbt.attributes ?? nbt.Attributes
+  let maxHealth = null
+  if (Array.isArray(attrs)) for (const a of attrs) {
+    if (attrId(a?.id ?? a?.Name) === "max_health") maxHealth = a.base ?? a.Base ?? maxHealth
+  }
+  const out = {}
+  for (const [k, v] of Object.entries(nbt)) {
+    if (NBT_ZERO_DEFAULTS.has(k) && (v === 0 || v === false)) continue
+    if (k === "Fire" && v <= 0) continue
+    if ((k === "OwnerUUID" || k === "Owner") && v === "") continue
+    if (k === "Health" && maxHealth != null && near(v, maxHealth)) continue
+    if (k === "Motion" && Array.isArray(v) && v.every(n => !n)) continue
+    if ((k === "HandItems" || k === "ArmorItems") && Array.isArray(v) && v.every(emptyObj)) continue
+    if ((k === "HandDropChances" || k === "ArmorDropChances") && Array.isArray(v) && v.every(vanillaDropChance)) continue
+    if ((k === "body_armor_drop_chance" || k === "saddle_drop_chance") && vanillaDropChance(v)) continue
+    if (k === "Brain" && Object.keys(v ?? {}).every(x => x === "memories" && emptyObj(v.memories))) continue
+    if ((k === "attributes" || k === "Attributes") && Array.isArray(v)) {
+      const kept = v.filter(a => {
+        if ((a?.modifiers ?? a?.Modifiers ?? []).length) return true
+        const def = ATTR_REGISTRY_DEFAULTS[attrId(a?.id ?? a?.Name)]
+        const base = a?.base ?? a?.Base
+        return def == null || base == null || !near(base, def)
+      })
+      if (kept.length) out[k] = kept
+      continue
+    }
+    out[k] = v
+  }
+  return out
+}
+
+function openEntity(e) {
+  const id = stripNs(e.nbt?.id ?? "entity")
+  state.error = ""
+  state.note = ""
+  state.blockName = prettyName(id)
+  state.blurb = ""
+  state.tableId = ""
+  state.table = null
+  state.stacks = []
+  state.gui = null
+  state.guiTitle = ""
+  state.poolId = ""
+  state.poolEntries = null
+  state.poolFallback = ""
+  state.poolStack = []
+  const rows = [{ label: "Entity", value: id, mono: true }]
+  if (e.pos) rows.push({ label: "Position", value: e.pos.map(v => +(+v).toFixed(3)).join(", "), mono: true })
+  const yaw = e.nbt?.Rotation?.[0]
+  if (yaw != null) rows.push({ label: "Rotation", value: `${Math.round(yaw)}°`, mono: true })
+  const vd = e.nbt?.VillagerData
+  if (vd?.profession) rows.push({ label: "Profession", value: prettyName(stripNs(vd.profession)) })
+  if (vd?.type) rows.push({ label: "Variant", value: prettyName(stripNs(vd.type)) })
+  const rest = filterDefaultNbt(e.nbt ?? {})
+  for (const k of ["id", "Pos", "Rotation", "UUID"]) delete rest[k]
+  if (Object.keys(rest).length) rows.push({ label: "NBT", value: JSON.stringify(rest, null, 2), mono: true, wide: true })
+  state.dataRows = rows
+  openSeq++
+  state.open = true
+}
+
 async function open(block) {
   const entry = buildApi.current.value?.palette[block.state]
   const name = entry?.Name ?? "minecraft:chest"
@@ -324,19 +425,22 @@ const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2()
 let downX = 0, downY = 0, downT = 0
 let hover = null
 
-function containerUnder(e, canvas) {
+// -> { block } | { marker } | null
+function inspectableUnder(e, canvas) {
   const root = buildApi.getRoot()
   if (!root) return null
   const r = canvas.getBoundingClientRect()
   _ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1))
   _ray.setFromCamera(_ndc, sceneApi.camera)
   const hit = _ray.intersectObject(root, true).find(h => h.face && h.object.visible)
+  const marker = buildApi.markerUnderRay(_ray.ray, hit?.distance ?? Infinity)
+  if (marker) return { marker }
   if (!hit) return null
   const p = hit.point.addScaledVector(hit.face.normal, -1)
   const b = buildApi.blockEntryAt(p.x, p.y, p.z)
   if (!b) return null
   const name = buildApi.current.value?.palette[b.state]?.Name
-  return isInspectable(name) || b.nbt?.LootTable ? b : null
+  return isInspectable(name) || b.nbt?.LootTable ? { block: b } : null
 }
 
 function clearHover(canvas) {
@@ -346,8 +450,8 @@ function clearHover(canvas) {
 
 function hoverCheck(e, canvas) {
   if (document.pointerLockElement || state.open || e.buttons) return clearHover(canvas)
-  const b = containerUnder(e, canvas)
-  const box = b && buildApi.boxForBlock(b)
+  const u = inspectableUnder(e, canvas)
+  const box = u?.marker ? buildApi.boxForEntity(u.marker) : u?.block ? buildApi.boxForBlock(u.block) : null
   if (box) {
     hover ??= sceneApi.makeHighlight()
     hover.show(box)
@@ -366,10 +470,10 @@ function initPicking(canvas) {
     if (document.pointerLockElement || e.button !== 0) return
     if (Math.hypot(e.clientX - downX, e.clientY - downY) > 4 || performance.now() - downT > 400) return
     if (state.open) return
-    const b = containerUnder(e, canvas)
-    if (b) {
+    const u = inspectableUnder(e, canvas)
+    if (u) {
       clearHover(canvas)
-      open(b)
+      u.marker ? openEntity(u.marker.e) : open(u.block)
     }
   })
   // hover raycasts throttle to one per frame, and skip entirely mid-drag
@@ -387,5 +491,5 @@ function initPicking(canvas) {
 }
 
 export function useContainer() {
-  return { state: readonly(state), open, close, reroll, addRoll, setTab, ensureOdds, openFallbackPool, poolBack, initPicking }
+  return { state: readonly(state), open, openEntity, close, reroll, addRoll, setTab, ensureOdds, openFallbackPool, poolBack, initPicking }
 }
