@@ -89,11 +89,21 @@ async function remapFluidStates(structure, lib, assets) {
       : e.Properties?.waterlogged === "true" ? "water" : null
     if (!type) continue
     const [bx, by, bz] = b.pos
-    const h = await lib.fluidHeights(assets, type, (dx, dy, dz) => {
+    const neighbors = {}
+    for (let dy = -1; dy <= 1; dy++) for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
       const nb = byPos.get((bx + dx) + "," + (by + dy) + "," + (bz + dz))
       const ne = nb && structure.palette[nb.state]
-      return ne?.Name ? { id: ne.Name, properties: ne.Properties } : null
-    })
+      if (!ne?.Name) continue
+      let k = !dx && !dy && !dz ? "self" : dy === 1 ? "up" : dy === -1 ? "down" : ""
+      if (dx || dy || dz) {
+        if (dz === -1) k += (k ? "_" : "") + "north"
+        else if (dz === 1) k += (k ? "_" : "") + "south"
+        if (dx === -1) k += (k ? "_" : "") + "west"
+        else if (dx === 1) k += (k ? "_" : "") + "east"
+      }
+      neighbors[k] = { id: ne.Name, ...(ne.Properties ?? {}) }
+    }
+    const h = await lib.fluidHeights(assets, type, neighbors)
     const ov = h.overlay ? (h.overlay.north ? "n" : "") + (h.overlay.south ? "s" : "") + (h.overlay.east ? "e" : "") + (h.overlay.west ? "w" : "") : ""
     const sm = h.same ? (h.same.north ? "n" : "") + (h.same.south ? "s" : "") + (h.same.east ? "e" : "") + (h.same.west ? "w" : "") + (h.same.up ? "u" : "") + (h.same.down ? "d" : "") : ""
     const key = `${e.Name}|${JSON.stringify(e.Properties ?? null)}|${h.nw.toFixed(3)},${h.ne.toFixed(3)},${h.sw.toFixed(3)},${h.se.toFixed(3)}|${h.full ? 1 : 0}|${h.angle == null ? "" : h.angle.toFixed(2)}|${ov}|${sm}`
