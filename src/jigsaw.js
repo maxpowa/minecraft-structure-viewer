@@ -11,11 +11,11 @@ const nsName = s => s.includes(":") ? s : "minecraft:" + s
 export async function runJigsaw(start, { loadStruct, loadPool, maxDepth = 6, maxPieces = 48, maxRadius = 96, levelSeed, onProgress, keepJigsaws = true }) {
   // misses cached too, so they aren't retried
   const structs = new Map(), pools = new Map()
-  const getStruct = async ref => {
+  async function getStruct(ref) {
     if (!structs.has(ref)) structs.set(ref, await Promise.resolve(loadStruct(ref)).catch(() => null))
     return structs.get(ref)
   }
-  const getPool = async ref => {
+  async function getPool(ref) {
     if (!pools.has(ref)) pools.set(ref, await Promise.resolve(loadPool(ref)).catch(() => null))
     return pools.get(ref)
   }

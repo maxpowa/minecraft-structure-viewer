@@ -66,7 +66,7 @@ const stripNs = s => typeof s === "string" ? s.replace(/^minecraft:/, "") : s
 // technical block nbt as readable label/value rows
 function dataRowsFor(name, p, nbt) {
   const rows = []
-  const add = (label, value, mono = false) => {
+  function add(label, value, mono = false) {
     if (value === undefined || value === null || value === "") return
     rows.push({ label, value: String(value), mono })
   }
@@ -118,7 +118,7 @@ async function loadPoolEntries(poolId) {
     if (!buf) return
     const json = JSON.parse(new TextDecoder().decode(buf))
     const out = []
-    const collect = (el, weight) => {
+    function collect(el, weight) {
       const type = stripNs(el?.element_type ?? "")
       if (type === "list_pool_element") {
         for (const c of el.elements ?? []) collect(c, weight)
@@ -382,7 +382,7 @@ function display(scatter = false) {
   if (scatter && pile.length <= ownCap) {
     state.gui = state.kind
     state.guiTitle = state.blockName
-    const slots = [...Array(ownCap).keys()]
+    const slots = Array.from(Array(ownCap).keys())
     for (let i = slots.length - 1; i > 0; i--) {
       const j = Math.random() * (i + 1) | 0
       ;[slots[i], slots[j]] = [slots[j], slots[i]]
@@ -391,7 +391,7 @@ function display(scatter = false) {
   } else {
     state.gui = { ...KINDS.generic, rows: Math.max(3, Math.ceil(pile.length / KINDS.generic.cols)) }
     state.guiTitle = state.blockName
-    const sorted = [...pile].sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
+    const sorted = Array.from(pile).sort((a, b) => b.count - a.count || prettyName(a.id).localeCompare(prettyName(b.id)))
     state.stacks = sorted.map((s, i) => ({ id: s.id, components: s.components, count: s.count, slot: i }))
   }
 }

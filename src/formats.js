@@ -8,7 +8,7 @@ import { AIR, parseState } from "./transforms.js"
 
 function collector() {
   const palette = [], idx = new Map(), cells = []
-  const stateFor = (Name, Properties) => {
+  function stateFor(Name, Properties) {
     const key = Name + "|" + JSON.stringify(Properties ?? null)
     let i = idx.get(key)
     if (i === undefined) {
@@ -20,7 +20,7 @@ function collector() {
   }
   const push = (x, y, z, state) => cells.push([x, y, z, state])
   // shift to a non-negative grid and derive the size from what's actually there
-  const finish = () => {
+  function finish() {
     if (!cells.length) return { size: [1, 1, 1], palette: [{ Name: "minecraft:air" }], blocks: [{ state: 0, pos: [0, 0, 0] }] }
     const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity]
     for (const c of cells) for (let i = 0; i < 3; i++) {
@@ -36,7 +36,7 @@ function collector() {
   return { stateFor, push, finish }
 }
 
-const strProps = props => {
+function strProps(props) {
   if (!props) return undefined
   const out = {}
   for (const [k, v] of Object.entries(props)) out[k] = String(v)

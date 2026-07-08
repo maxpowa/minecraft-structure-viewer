@@ -29,13 +29,13 @@ async function populate() {
   const lib = await loadLibrary()
   structPath = new Map()
   // lowest priority first so a higher pack's zip path wins the map slot
-  for (const src of [...packs.allSources()].reverse()) {
+  for (const src of Array.from(packs.allSources()).reverse()) {
     for (const k of lib.parseZip(src).keys()) {
       const m = k.match(STRUCT_RE)
       if (m) structPath.set(m[1] + "/" + m[2], k)
     }
   }
-  state.names = [...structPath.keys()].sort()
+  state.names = Array.from(structPath.keys()).sort()
   if (state.selected.length) state.selected = state.selected.filter(rel => structPath.has(rel))
 }
 
@@ -59,13 +59,13 @@ function computeWorldgen() {
     const assets = packs.assets.value
     if (!assets) return
     const td = new TextDecoder()
-    const readJson = async p => {
+    async function readJson(p) {
       try { const b = await lib.readFile(p, assets); return b ? JSON.parse(td.decode(b)) : null } catch { return null }
     }
     const SR = /^data\/([^/]+)\/worldgen\/structure\/(.+)\.json$/
     const PR = /^data\/([^/]+)\/worldgen\/template_pool\/(.+)\.json$/
     const nsify = ref => typeof ref === "string" ? ref.replace(":", "/") : ref
-    const keys = [...await allZipKeys()]
+    const keys = Array.from(await allZipKeys())
     const startPoolDepth = new Map(), startPoolRadius = new Map()
     for (const p of keys) {
       const m = p.match(SR); if (!m) continue
@@ -81,7 +81,7 @@ function computeWorldgen() {
       }
     }
     const childRef = new Set(), startMembers = new Set(), depth = new Map(), radius = new Map()
-    const locs = j => {
+    function locs(j) {
       const out = []
       for (const e of j?.elements || []) {
         const el = e.element || {}
@@ -106,7 +106,7 @@ function computeWorldgen() {
     starterSet = new Set(state.names.filter(n => !childRef.has(n)))
     for (const p of PROC) for (const n of state.names) if (n.startsWith(p.prefix) && n !== p.entry) starterSet.delete(n)
     const procEntry = new Set(PROC.map(p => p.entry))
-    standaloneSet = new Set([...starterSet].filter(n => !startMembers.has(n) && !procEntry.has(n)))
+    standaloneSet = new Set(Array.from(starterSet).filter(n => !startMembers.has(n) && !procEntry.has(n)))
     structDepth = depth
     structRadius = radius
     state.worldgenReady = true

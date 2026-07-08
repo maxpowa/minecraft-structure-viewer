@@ -147,7 +147,7 @@ function makeHighlight() {
     }
     const a = pos.array
     let n = 0
-    const put = ci => {
+    function put(ci) {
       a[n++] = ci & 1 ? box.max.x : box.min.x
       a[n++] = ci & 2 ? box.max.y : box.min.y
       a[n++] = ci & 4 ? box.max.z : box.min.z

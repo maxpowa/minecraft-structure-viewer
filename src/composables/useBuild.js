@@ -31,14 +31,14 @@ const LEGACY_RENAMES = {
 // generation: jigsaws become their final_state, structure blocks disappear
 const SB = /(^|:)structure_block$/
 function stripStructureBlocks(structure) {
-  const isTech = b => {
+  function isTech(b) {
     const n = structure.palette[b.state]?.Name || ""
     return JIGSAW.test(n) || SB.test(n)
   }
   if (!structure.blocks.some(isTech)) return structure
   const palette = structure.palette.slice()
   const idx = new Map()
-  const stateFor = e => {
+  function stateFor(e) {
     const key = e.Name + "|" + JSON.stringify(e.Properties ?? null)
     let i = idx.get(key)
     if (i === undefined) {
@@ -137,7 +137,7 @@ const state = reactive({
 const OPENABLE = /(^|:)([a-z_]+_)?(door|trapdoor|fence_gate)$/
 const isDoorName = name => /(^|:)([a-z_]+_)?door$/.test(name) && !/trapdoor$/.test(name)
 const isOpenable = e => !!(e?.Properties && "open" in e.Properties && OPENABLE.test(e.Name || ""))
-const sameProps = (a, b) => {
+function sameProps(a, b) {
   const ka = Object.keys(a || {})
   if (ka.length !== Object.keys(b || {}).length) return false
   return ka.every(k => a[k] === b[k])
@@ -223,7 +223,7 @@ function attachDoors(entries) {
   if (!entries.length) return 0
   // an instance slot per placement of each open/closed state, in the state's
   // canonical group
-  const slotFor = stateIdx => {
+  function slotFor(stateIdx) {
     const key = stateRender.get(stateIdx).key
     let s = doorSlots.get(key)
     if (!s) doorSlots.set(key, s = { count: 0, meshes: [] })
@@ -496,7 +496,7 @@ function rayHit(ox, oy, oz, dx, dy, dz) {
   if (!structure || !root) return null
   const idx = cellIndex(), REACH = 80
   const rx = root.position.x, ry = root.position.y, rz = root.position.z
-  const shapeT = (bx, by, bz, e) => {
+  function shapeT(bx, by, bz, e) {
     const s = shapeFor(e)
     const cx = bx * 16 + rx - 8, cy = by * 16 + ry - 8, cz = bz * 16 + rz - 8
     const t = rayBoxT(ox, oy, oz, dx, dy, dz, cx + s[0], cy + s[1], cz + s[2], cx + s[3], cy + s[4], cz + s[5])
@@ -621,7 +621,7 @@ function currentBoxes() {
   if (!structure || !root || !templates) return out
   const p = root.position
   const cache = new Map(), _b = new THREE.Box3()
-  const localBoxes = tmpl => {
+  function localBoxes(tmpl) {
     let arr = cache.get(tmpl)
     if (arr) return arr
     arr = []
@@ -676,7 +676,7 @@ async function build(structure = source, refit = true) {
   cancelBuild = false
   lock(true)
   const prevCurrent = current.value, prevSource = source, prevHasSB = state.hasStructureBlocks
-  const abort = () => {
+  function abort() {
     current.value = prevCurrent
     source = prevSource
     state.hasStructureBlocks = prevHasSB
@@ -810,7 +810,7 @@ async function build(structure = source, refit = true) {
     // culling must see the same renamed blocks that render: a legacy name
     // (grass_path) has no blockstate in modern packs, and the missing-model
     // fallback would occlude like a full cube
-    const legacyCull = (name, props) => {
+    function legacyCull(name, props) {
       const renamed = LEGACY_RENAMES[name.replace("minecraft:", "")] ?? name
       return [renamed, fixLegacyProps(renamed.replace("minecraft:", ""), props)]
     }

@@ -4,7 +4,7 @@
 // water levels row for eyeballing surface heights against the game.
 export function makeDebug(kind) {
   const palette = [], pi = new Map()
-  const st = (Name, Properties = {}) => {
+  function st(Name, Properties = {}) {
     const k = Name + JSON.stringify(Properties)
     if (!pi.has(k)) {
       palette.push({ Name: "minecraft:" + Name, Properties })
@@ -14,24 +14,24 @@ export function makeDebug(kind) {
   }
   const blocks = [], put = (x, y, z, name, props) => blocks.push({ pos: [x, y, z], state: st(name, props) })
   const run = (z, name, props, n = 6, y = 0) => { for (let i = 0; i < n; i++) put(i, y, z, name, props) }
-  const finish = () => {
+  function finish() {
     const mx = a => Math.max(...blocks.map(b => b.pos[a])) + 1
     return { size: [mx(0), mx(1), mx(2)], palette, blocks }
   }
 
   if (kind === "fluid") {
     const water = (x, y, z, level) => put(x, y, z, "water", { level: String(level) })
-    const floor = (x0, z0, x1, z1, y = 0, name = "stone") => {
+    function floor(x0, z0, x1, z1, y = 0, name = "stone") {
       for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) put(x, y, z, name)
     }
-    const rect = (x0, z0, x1, z1) => {
+    function rect(x0, z0, x1, z1) {
       const out = []
       for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) out.push([x, z])
       return out
     }
     // authentic flat-ground spread: sources are level 0, every horizontal step
     // adds 1 (the game's dropoff), solids block, dead past level 7
-    const spread = (cells, sources, solids, place) => {
+    function spread(cells, sources, solids, place) {
       const k = (x, z) => x + "," + z
       const solid = new Set(solids.map(c => k(...c)))
       const region = new Set(cells.map(c => k(...c)))

@@ -32,7 +32,7 @@ const TABS = computed(() => state.dataRows ? [] : state.table
 const rules = computed(() => state.table ? describeTable(state.table) : [])
 
 // the list tab mirrors the chest contents as text, biggest stacks first
-const listStacks = computed(() => [...state.stacks].sort((a, b) =>
+const listStacks = computed(() => Array.from(state.stacks).sort((a, b) =>
   b.count - a.count || stackName(a).localeCompare(stackName(b))))
 
 function stackName(s) {

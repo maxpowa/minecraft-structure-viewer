@@ -161,7 +161,7 @@ function tiledSub(srcImg, key, sub, ur, vr) {
 // greedily merge a set of "a,b" plane cells into maximal rectangles
 function greedyRects(cellSet) {
   const done = new Set(), rects = []
-  const coords = [...cellSet].map(s => s.split(",").map(Number)).sort((p, q) => p[1] - q[1] || p[0] - q[0])
+  const coords = Array.from(cellSet).map(s => s.split(",").map(Number)).sort((p, q) => p[1] - q[1] || p[0] - q[0])
   for (const [a, b] of coords) {
     if (done.has(a + "," + b)) continue
     let a1 = a
@@ -183,7 +183,7 @@ function buildAtlas(textures) {
   const pad = 1
   const rep = new Map()
   for (const t of textures) { const h = hashTexture(t); if (!rep.has(h)) rep.set(h, t) }
-  const items = [...rep.values()].map(t => ({ t, img: t.image, w: t.image.width, h: t.image.height }))
+  const items = Array.from(rep.values()).map(t => ({ t, img: t.image, w: t.image.width, h: t.image.height }))
   items.sort((a, b) => b.h - a.h)
   let ai = 0, x = 0, y = 0, rowH = 0
   const sizes = [{ w: 0, h: 0 }]
@@ -280,12 +280,12 @@ export async function optimise(structure, templates, position, { getCullFaces, s
     if (!tmpl) continue
     tmpl.updateMatrixWorld(true)
     const flats = [], meshMap = new Map()
-    const atlasFace = (o, face) => {
+    function atlasFace(o, face) {
       let m = meshMap.get(o)
       if (!m) meshMap.set(o, m = { geo: o.geometry, matrix: o.matrixWorld.clone(), faces: [] })
       m.faces.push(face)
     }
-    const toAtlas = (mat, tex, face) => {
+    function toAtlas(mat, tex, face) {
       const translucent = isTranslucent(tex)
       const sig = matSignature(mat) + (translucent ? "|T" : "|O")
       let grp = atlasGroups.get(sig)
@@ -347,7 +347,7 @@ export async function optimise(structure, templates, position, { getCullFaces, s
       if (demote.has(c)) atlasFace(c.o, toAtlas(c.mat, c.tex, { start: c.start, count: c.count, tex: c.tex, cull: c.cull }))
       else merge.push(c.flat)
     }
-    tdata.set(state, { merge, meshes: [...meshMap.values()] })
+    tdata.set(state, { merge, meshes: Array.from(meshMap.values()) })
   }
 
   // greedy: bucket flat faces by (plane, normal, cell, phase) across all
@@ -395,7 +395,7 @@ export async function optimise(structure, templates, position, { getCullFaces, s
   // glass face draws first in the merged mesh hard-occludes the ones behind)
   const atlases = new Map()
   for (const [sig, grp] of atlasGroups) {
-    const { atlases: ats, rects, sizes } = buildAtlas([...grp.textures])
+    const { atlases: ats, rects, sizes } = buildAtlas(Array.from(grp.textures))
     pending.push(...ats)
     const materials = ats.map(a => {
       const m = grp.repMat.clone()
@@ -454,7 +454,7 @@ export async function optimise(structure, templates, position, { getCullFaces, s
   const opt = new THREE.Group()
   opt.position.copy(position)
   let drawCalls = 0, tris = 0
-  const addMesh = (acc, material) => {
+  function addMesh(acc, material) {
     if (!acc.P.length) return
     const geo = new THREE.BufferGeometry()
     geo.setAttribute("position", new THREE.Float32BufferAttribute(acc.P, 3))

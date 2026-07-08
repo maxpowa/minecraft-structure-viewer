@@ -36,14 +36,14 @@ export async function getFont() {
 }
 
 // glyphs outside the sheet (or with no pixels) fall back to "?"
-const codeOf = (font, g) => {
+function codeOf(font, g) {
   const n = g.codePointAt(0)
   return n < 256 && (font.widths[n] || n === 32) ? n : 63
 }
 
 export function measure(font, text) {
   let w = 0
-  for (const g of [...text]) w += font.widths[codeOf(font, g)] + 1
+  for (const g of Array.from(text)) w += font.widths[codeOf(font, g)] + 1
   return Math.max(0, w - 1)
 }
 
@@ -61,7 +61,7 @@ export function drawText(ctx, font, text, x, y, { scale = 1, color } = {}) {
     dy = 0
   }
   target.imageSmoothingEnabled = false
-  for (const g of [...text]) {
+  for (const g of Array.from(text)) {
     const n = codeOf(font, g)
     target.drawImage(font.canvas, (n % 16) * font.cw, (n / 16 | 0) * font.ch, font.cw, font.ch, dx, dy, font.cw * scale, font.ch * scale)
     dx += (font.widths[n] + 1) * scale

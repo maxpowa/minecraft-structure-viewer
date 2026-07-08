@@ -30,7 +30,7 @@ const { lock, locked } = useLock()
 let swapHandler = null
 const setSwapHandler = fn => { swapHandler = fn }
 
-const setChannelParam = ch => {
+function setChannelParam(ch) {
   const u = new URL(location)
   ch === "snapshot" ? u.searchParams.set("channel", "snapshot") : u.searchParams.delete("channel")
   u.searchParams.delete("version") // picking a channel unpins

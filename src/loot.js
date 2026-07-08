@@ -152,7 +152,7 @@ export async function sampleTable(table, opens = 10000) {
       t.max = Math.max(t.max, count)
     }
   }
-  return [...tally.values()].map(t => ({
+  return Array.from(tally.values()).map(t => ({
     id: t.id,
     components: t.components,
     chance: t.hits / opens,   // odds an open contains it at all

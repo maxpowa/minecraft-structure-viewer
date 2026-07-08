@@ -22,7 +22,7 @@ const entries = computed(() => {
   const out = []
   for (let [name, child] of props.node.dirs) {
     while (child.dirs.size === 1 && child.files.length === 0) {
-      const [k, v] = [...child.dirs][0]
+      const [k, v] = Array.from(child.dirs)[0]
       name += "/" + k
       child = v
     }
@@ -39,7 +39,7 @@ const mounted = ref(new Set())
 const cascade = reactive({})
 
 const addTo = (setRef, name) => { setRef.value = new Set(setRef.value).add(name) }
-const dropFrom = (setRef, name) => {
+function dropFrom(setRef, name) {
   const next = new Set(setRef.value)
   next.delete(name)
   setRef.value = next
@@ -111,7 +111,7 @@ let revealed = false
 watch(() => state.selected, sel => {
   if (revealed || !sel.length) return
   revealed = true
-  const hasSel = node => node.files.some(f => sel.includes(f)) || [...node.dirs.values()].some(hasSel)
+  const hasSel = node => node.files.some(f => sel.includes(f)) || Array.from(node.dirs.values()).some(hasSel)
   for (const { name, child } of entries.value) if (hasSel(child)) {
     addTo(opened, name)
     addTo(mounted, name)

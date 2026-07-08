@@ -37,7 +37,7 @@ export function plainText(m) {
 
 function faceData(t) {
   if (!t?.messages) return null
-  const lines = [...t.messages].slice(0, 4).map(plainText)
+  const lines = Array.from(t.messages).slice(0, 4).map(plainText)
   while (lines.length < 4) lines.push("")
   if (!lines.some(l => l)) return null
   return { lines, color: typeof t.color === "string" ? t.color : "black", glow: !!t.has_glowing_text }

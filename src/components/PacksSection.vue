@@ -9,7 +9,7 @@ const busy = computed(() => state.busy || locked.value)
 const fileInput = ref(null)
 
 function onFiles(e) {
-  addPacks([...e.target.files])
+  addPacks(Array.from(e.target.files))
   e.target.value = ""
 }
 </script>

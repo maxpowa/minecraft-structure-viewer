@@ -58,7 +58,7 @@ let urlSeed = null, urlLevel = null
 }
 
 const rand32 = () => (Math.random() * 0x100000000) >>> 0
-const nsSplit = ref => {
+function nsSplit(ref) {
   const i = ref.indexOf(":")
   return i < 0 ? ["minecraft", ref] : [ref.slice(0, i), ref.slice(i + 1)]
 }

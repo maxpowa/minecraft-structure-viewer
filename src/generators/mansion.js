@@ -29,7 +29,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   }
   const isHouse = (grid, x, y) => { const v = grid.get(x, y); return v === 1 || v === 2 || v === 3 || v === 4 }
 
-  const recursiveCorridor = (grid, x, y, heading, depth) => {
+  function recursiveCorridor(grid, x, y, heading, depth) {
     if (depth <= 0) return
     grid.set(x, y, 1)
     grid.setif(x + stepX(heading), y + stepZ(heading), 0, 1)
@@ -52,7 +52,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
     grid.setif(x + stepX(c) * 2, y + stepZ(c) * 2, 0, 2)
     grid.setif(x + stepX(cc) * 2, y + stepZ(cc) * 2, 0, 2)
   }
-  const cleanEdges = grid => {
+  function cleanEdges(grid) {
     let touched = false
     for (let y = 0; y < grid.height; y++) for (let x = 0; x < grid.width; x++) {
       if (grid.get(x, y) !== 0) continue
@@ -88,7 +88,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   const isRoomId = (x, y, floor, roomId) => (floorRooms[floor].get(x, y) & 65535) === roomId
   const get1x2RoomDirection = (x, y, floor, roomId) => { for (const d of HPLANE) if (isRoomId(x + stepX(d), y + stepZ(d), floor, roomId)) return d; return null }
 
-  const identifyRooms = (from, roomGrid) => {
+  function identifyRooms(from, roomGrid) {
     const list = []
     for (let y = 0; y < from.height; y++) for (let x = 0; x < from.width; x++) if (from.get(x, y) === 2) list.push([x, y])
     const shuffled = shuffle(list, rand)
@@ -169,7 +169,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   ]
   roomColl[2] = roomColl[1]                                  // ThirdFloorRoomCollection extends Second (identical)
 
-  const zeroPosT = (pos, mir, k, sx, sz) => {
+  function zeroPosT(pos, mir, k, sx, sz) {
     sx--; sz--
     const i = mir === "fb" ? sx : 0, j = mir === "lr" ? sz : 0
     let off
@@ -178,7 +178,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   }
 
   const traverseWallPiece = data => { addPiece(data.wallType, mv(data.position, "east", data.rot, 7), data.rot); data.position = mv(data.position, "south", data.rot, 8) }
-  const traverseTurn = data => {
+  function traverseTurn(data) {
     data.position = mv(data.position, "south", data.rot, -1)
     addPiece("wall_corner", data.position, data.rot)
     data.position = mv(data.position, "south", data.rot, -7)
@@ -186,7 +186,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
     data.rot = getR(data.rot, 1)
   }
   const traverseInnerTurn = data => { data.position = mv(data.position, "south", data.rot, 6); data.position = mv(data.position, "east", data.rot, 8); data.rot = getR(data.rot, 3) }
-  const traverseOuterWalls = (data, grid, gridDir0, sx, sy, ex, ey) => {
+  function traverseOuterWalls(data, grid, gridDir0, sx, sy, ex, ey) {
     let gx = sx, gy = sy, gridDir = gridDir0
     const startDir = gridDir0
     do {
@@ -202,7 +202,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
     } while (gx !== ex || gy !== ey || startDir !== gridDir)
   }
 
-  const addRoom1x1 = (roomPos, doorDir, rooms) => {
+  function addRoom1x1(roomPos, doorDir, rooms) {
     let pieceRot = 0, roomType = rooms.g1x1()
     if (doorDir !== "east") {
       if (doorDir === "north") pieceRot = getR(pieceRot, 3)
@@ -215,7 +215,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
     o = rotPos(o, ROT)
     addPiece(roomType, [roomPos[0] + o[0], roomPos[1], roomPos[2] + o[2]], pieceRot)
   }
-  const addRoom1x2 = (roomPos, roomDir, doorDir, rooms, stairs) => {
+  function addRoom1x2(roomPos, roomDir, doorDir, rooms, stairs) {
     const side = () => rooms.g1x2side(stairs), front = () => rooms.g1x2front(stairs)
     const P = (baseDir, n, baseDir2, n2) => { let p = mv(roomPos, baseDir, ROT, n); if (baseDir2) p = mv(p, baseDir2, ROT, n2); return p }
     if (doorDir === "east" && roomDir === "south") addPiece(side(), P("east", 1), ROT)
@@ -233,7 +233,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
     else if (doorDir === "up" && roomDir === "east") addPiece(rooms.g1x2s(), P("east", 15), getR(ROT, 1))
     else if (doorDir === "up" && roomDir === "south") addPiece(rooms.g1x2s(), P("east", 1), ROT)
   }
-  const addRoom2x2 = (roomPos, roomDir, doorDir, rooms) => {
+  function addRoom2x2(roomPos, roomDir, doorDir, rooms) {
     let east = 0, south = 0, rot = ROT, mir
     if (doorDir === "east" && roomDir === "south") east = -7
     else if (doorDir === "east" && roomDir === "north") { east = -7; south = 6; mir = "lr" }
@@ -249,7 +249,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   }
   const addRoom2x2Secret = (roomPos, rooms) => addPiece(rooms.g2x2s(), mv(roomPos, "east", ROT, 1), ROT)
 
-  const createRoof = (roofOrigin, grid, aboveGrid) => {
+  function createRoof(roofOrigin, grid, aboveGrid) {
     const at = (x, y) => { let p = mv(roofOrigin, "south", ROT, 8 + (y - startY) * 8); return mv(p, "east", ROT, (x - startX) * 8) }
     for (let y = 0; y < grid.height; y++) for (let x = 0; x < grid.width; x++) {
       const position = at(x, y), isAbove = aboveGrid != null && isHouse(aboveGrid, x, y)
@@ -362,7 +362,7 @@ export async function runMansion(loadStruct, { seed } = {}) {
   }
 
   // load every referenced template once, then flatten
-  const names = [...new Set(pieces.map(p => p.name))]
+  const names = Array.from(new Set(pieces.map(p => p.name)))
   const tpl = {}
   for (const n of names) tpl[n] = await loadStruct("woodland_mansion/" + n)
   // mansion pieces use the STRUCTURE_BLOCK processor => air carves (doorways)

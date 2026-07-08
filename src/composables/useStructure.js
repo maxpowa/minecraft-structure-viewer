@@ -57,7 +57,7 @@ export async function decodeVanillaParam(param) {
 let seededHistory = false
 let navigatingHistory = false
 
-const setVanillaParam = rel => {
+function setVanillaParam(rel) {
   if (navigatingHistory) return
   const u = new URL(location)
   const before = u.searchParams.get("vanilla")
@@ -128,7 +128,7 @@ function packLoaded() {
     parts.push({ s: c.s, name: c.name, off: [best[0] + 3, 0, best[1] + 3], size: c.s.size })
   }
   const palette = [], byKey = new Map()
-  const stateFor = e => {
+  function stateFor(e) {
     const k = e.Name + "|" + JSON.stringify(e.Properties ?? null)
     let i = byKey.get(k)
     if (i === undefined) {
@@ -165,7 +165,7 @@ function packLoaded() {
 // a cancelled build leaves the previous scene up, so the list selection,
 // name and url roll back with it
 function snapshot() {
-  return { loaded, anchor, name: state.name, selected: [...structures.state.selected], url: location.href }
+  return { loaded, anchor, name: state.name, selected: Array.from(structures.state.selected), url: location.href }
 }
 function restore(snap) {
   loaded = snap.loaded
@@ -222,7 +222,7 @@ function visualOrder() {
     node.files.push(rel)
   }
   const order = new Map()
-  const walk = node => {
+  function walk(node) {
     for (const child of node.dirs.values()) walk(child)
     for (const rel of node.files) order.set(rel, order.size)
   }
@@ -250,7 +250,7 @@ function loadVanilla(rel, ev) {
       const order = visualOrder()
       if (shift && anchor != null && anchor !== rel && order.has(anchor) && order.has(rel)) {
         const [lo, hi] = [order.get(anchor), order.get(rel)].sort((a, b) => a - b)
-        const range = [...order.entries()].filter(([, i]) => i >= lo && i <= hi).map(([r]) => r)
+        const range = Array.from(order.entries()).filter(([, i]) => i >= lo && i <= hi).map(([r]) => r)
         const entries = []
         for (const r of range) {
           const existing = loaded.find(e => e.rel === r)
