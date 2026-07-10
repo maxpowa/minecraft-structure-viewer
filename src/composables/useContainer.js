@@ -6,7 +6,7 @@ import { useScene } from "./useScene.js"
 import { useBuild } from "./useBuild.js"
 import { useSlicers } from "./useSlicers.js"
 import { useStructures } from "./useStructures.js"
-import { readLootTable, rollLoot, sampleTable, stackKey, prettyName, isInspectable } from "../loot.js"
+import { readLootTable, readTrialSpawnerConfig, rollLoot, sampleTable, stackKey, prettyName, isInspectable } from "../loot.js"
 import { parseState } from "../transforms.js"
 
 // Clicking a loot container (chest, barrel, dispenser...) opens a modal with
@@ -66,6 +66,8 @@ let openSeq = 0 // bumps per open(): stale async work from a previous container 
 const stripNs = s => typeof s === "string" ? s.replace(/^minecraft:/, "") : s
 
 // technical block nbt as readable label/value rows
+const spawnerEntity = nbt => nbt?.SpawnData?.entity?.id ?? nbt?.SpawnPotentials?.[0]?.data?.entity?.id ?? null
+
 function dataRowsFor(name, p, nbt) {
   const rows = []
   function add(label, value, mono = false) {
@@ -100,8 +102,52 @@ function dataRowsFor(name, p, nbt) {
     add("Orientation", p.orientation, true)
     if (nbt?.selection_priority) add("Selection priority", nbt.selection_priority)
     if (nbt?.placement_priority) add("Placement priority", nbt.placement_priority)
+  } else if (name === "trial_spawner") {
+    // the quick synchronous rows; loadTrialRows swaps in the config detail
+    add("State", prettyName(p.trial_spawner_state ?? ""))
+    if (p.ominous === "true") add("Ominous", "Yes")
+    if (typeof nbt?.normal_config === "string") add("Config", stripNs(nbt.normal_config), true)
+  } else if (/(^|_)spawner$/.test(name)) {
+    const entity = spawnerEntity(nbt)
+    if (entity) add("Entity", prettyName(stripNs(entity)))
+    if (nbt?.MinSpawnDelay != null || nbt?.MaxSpawnDelay != null) {
+      add("Spawn delay", `${nbt?.MinSpawnDelay ?? 200}–${nbt?.MaxSpawnDelay ?? 800} ticks`)
+    }
+    add("Spawn count", nbt?.SpawnCount)
+    add("Spawn range", nbt?.SpawnRange)
+    add("Activation range", nbt?.RequiredPlayerRange)
+    add("Max nearby", nbt?.MaxNearbyEntities)
   }
   return rows
+}
+
+// trial spawner detail needs its datapack configs: fetch them and swap the
+// rows in, unless another open happened meanwhile
+async function loadTrialRows(p, nbt) {
+  const seq = openSeq
+  const rows = []
+  const add = (label, value, mono = false) => {
+    if (value === undefined || value === null || value === "") return
+    rows.push({ label, value: String(value), mono })
+  }
+  add("State", prettyName(p.trial_spawner_state ?? ""))
+  if (p.ominous === "true") add("Ominous", "Yes")
+  for (const [label, ref] of [["normal", nbt?.normal_config], ["ominous", nbt?.ominous_config]]) {
+    const cfg = await readTrialSpawnerConfig(ref)
+    if (!cfg) continue
+    const ents = [...new Set((cfg.spawn_potentials ?? []).map(e => e?.data?.entity?.id).filter(Boolean))]
+    if (ents.length) add(label === "normal" ? "Entity" : "Ominous entity", ents.map(e => prettyName(stripNs(e))).join(", "))
+    if (label === "normal") {
+      add("Total mobs", `${cfg.total_mobs ?? 6} (+${cfg.total_mobs_added_per_player ?? 2}/player)`)
+      add("Simultaneous", `${cfg.simultaneous_mobs ?? 2} (+${cfg.simultaneous_mobs_added_per_player ?? 1}/player)`)
+      add("Spawn interval", `${cfg.ticks_between_spawn ?? 40} ticks`)
+      const loots = (cfg.loot_tables_to_eject ?? []).map(l => stripNs(l?.data ?? "")).filter(Boolean)
+      if (loots.length) add("Reward loot", loots.join(", "), true)
+    }
+  }
+  if (typeof nbt?.normal_config === "string") add("Config", stripNs(nbt.normal_config), true)
+  if (seq !== openSeq) return
+  state.dataRows = rows
 }
 
 // what the jigsaw's template pool can place: weighted entries, nested list
@@ -316,7 +362,7 @@ async function open(block) {
   state.poolFallback = ""
   state.poolStack = []
   const bare = stripNs(name)
-  if (/(^|_)(command_block|structure_block|jigsaw)$/.test(bare)) {
+  if (/(^|_)(command_block|structure_block|jigsaw|spawner)$/.test(bare)) {
     state.tableId = ""
     state.table = null
     state.stacks = []
@@ -327,6 +373,7 @@ async function open(block) {
     openSeq++
     state.open = true
     if (bare === "jigsaw" && block.nbt?.pool && stripNs(block.nbt.pool) !== "empty") loadPoolEntries(block.nbt.pool)
+    if (bare === "trial_spawner") loadTrialRows(entry?.Properties ?? {}, block.nbt)
     return
   }
   state.tableId = (block.nbt?.LootTable ?? "").replace(/^minecraft:/, "")

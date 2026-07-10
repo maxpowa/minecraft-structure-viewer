@@ -9,7 +9,7 @@ import { optimise } from "../optimise.js"
 import { exportScene } from "../export.js"
 import { makeSignTexts, plainText } from "../signs.js"
 import { JIGSAW, parseState } from "../transforms.js"
-import { isInspectable } from "../loot.js"
+import { isInspectable, readTrialSpawnerConfig } from "../loot.js"
 import { getFont, measure, drawText } from "../mcfont.js"
 
 const packs = usePacks()
@@ -519,6 +519,32 @@ async function attachEntities(structure, lib, assets) {
   return draws
 }
 
+// mob spawners show their entity's spawn egg floating inside the cage
+async function attachSpawnerEggs(structure, lib, assets) {
+  let draws = 0
+  const texCache = new Map()
+  for (const b of structure.blocks) {
+    if (!/(^|[:_])spawner$/.test(structure.palette[b.state]?.Name ?? "")) continue
+    let id = b.nbt?.SpawnData?.entity?.id ?? b.nbt?.SpawnPotentials?.[0]?.data?.entity?.id
+    if (!id) {
+      const cfg = await readTrialSpawnerConfig(b.nbt?.normal_config)
+      id = cfg?.spawn_potentials?.[0]?.data?.entity?.id
+    }
+    if (typeof id !== "string") continue
+    const name = id.includes(":") ? id.split(":")[1] : id
+    if (!texCache.has(name)) texCache.set(name, await entityMarkerTexture(lib, assets, name))
+    const tex = texCache.get(name)
+    if (!tex) continue
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, alphaTest: 0.5, transparent: false }))
+    spr.scale.set(9, 9, 1)
+    spr.position.set(b.pos[0] * 16, b.pos[1] * 16, b.pos[2] * 16)
+    root.add(spr)
+    draws++
+  }
+  for (const tex of texCache.values()) if (tex) markerTextures.push(tex)
+  return draws
+}
+
 // the fixed hitbox anchored at the entity's feet, taller for a stack
 function boxForEntity(m) {
   _aimBox.min.set(m.x - ENTITY_BOX / 2, m.y, m.z - ENTITY_BOX / 2)
@@ -634,7 +660,8 @@ function rayHit(ox, oy, oz, dx, dy, dz, REACH = 80) {
     const i = idx.get(key)
     if (i == null) continue
     const b = structure.blocks[i]
-    if ((isInspectable(structure.palette[b.state]?.Name) || b.nbt?.LootTable) && shapeT(bx, by, bz, structure.palette[b.state])) {
+    const bName = structure.palette[b.state]?.Name ?? ""
+    if ((isInspectable(bName) || b.nbt?.LootTable || /(^|[:_])spawner$/.test(bName)) && shapeT(bx, by, bz, structure.palette[b.state])) {
       return entT < t ? { entity: entM } : { container: b }
     }
     const cx = bx * 16 + rx, cy = by * 16 + ry, cz = bz * 16 + rz
@@ -958,7 +985,7 @@ async function build(structure = source, refit = true) {
     if (old) sceneApi.contentRoots.delete(old)
     if (animator) sceneApi.animators.delete(animator)
     const doorDraws = attachDoors(doorEntries)
-    const entityDraws = await attachEntities(structure, lib, assets)
+    const entityDraws = await attachEntities(structure, lib, assets) + await attachSpawnerEggs(structure, lib, assets)
     try {
       const signs = await makeSignTexts(structure)
       if (signs) root.add(signs)

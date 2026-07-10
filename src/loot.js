@@ -47,6 +47,20 @@ async function readLootTableRaw(id) {
   return null
 }
 
+// trial spawner configs live in the trial_spawner datapack registry; block
+// entities usually hold just the reference id, but inline objects are legal
+export async function readTrialSpawnerConfig(ref) {
+  if (!ref) return null
+  if (typeof ref === "object") return ref
+  const lib = await loadLibrary()
+  const assets = packs.assets.value
+  const [ns, path] = ref.includes(":") ? ref.split(":") : ["minecraft", ref]
+  try {
+    const buf = await lib.readFile(`data/${ns}/trial_spawner/${path}.json`, assets)
+    return buf ? JSON.parse(new TextDecoder().decode(buf)) : null
+  } catch { return null }
+}
+
 // number providers: plain number, {min,max} (uniform), constant, binomial
 function rollNum(n, int = false) {
   if (n == null) return 1
