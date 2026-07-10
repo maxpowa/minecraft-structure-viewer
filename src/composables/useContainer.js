@@ -420,9 +420,11 @@ function close() {
   state.open = false
 }
 
-// orbit-mode picking: a click that didn't drag raycasts the built meshes,
-// steps one unit inside the hit face, and opens whatever loot container
-// lives in that cell. hovering one shows the block highlight + a pointer
+// orbit-mode picking: a click that didn't drag marches the block grid along
+// the cursor ray (same walk-mode rayHit, orbit-scale reach) and opens
+// whatever loot container lives in the hit cell. a triangle raycast against
+// the merged meshes would scan every triangle in the scene per event, which
+// stutters on huge scenes. hovering shows the block highlight + a pointer
 // cursor. walking is excluded (pointer lock owns clicks there)
 const _ray = new THREE.Raycaster(), _ndc = new THREE.Vector2()
 let downX = 0, downY = 0, downT = 0
@@ -435,15 +437,10 @@ function inspectableUnder(e, canvas) {
   const r = canvas.getBoundingClientRect()
   _ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1))
   _ray.setFromCamera(_ndc, sceneApi.camera)
-  const hit = _ray.intersectObject(root, true).find(h => h.face && h.object.visible)
-  const marker = buildApi.markerUnderRay(_ray.ray, hit?.distance ?? Infinity)
-  if (marker) return { marker }
-  if (!hit) return null
-  const p = hit.point.addScaledVector(hit.face.normal, -1)
-  const b = buildApi.blockEntryAt(p.x, p.y, p.z)
-  if (!b) return null
-  const name = buildApi.current.value?.palette[b.state]?.Name
-  return isInspectable(name) || b.nbt?.LootTable ? { block: b } : null
+  const { origin: o, direction: d } = _ray.ray
+  const h = buildApi.rayHit(o.x, o.y, o.z, d.x, d.y, d.z, 4000)
+  if (h?.entity) return { marker: h.entity }
+  return h?.container ? { block: h.container } : null
 }
 
 function clearHover(canvas) {
