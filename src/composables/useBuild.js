@@ -175,8 +175,11 @@ async function remapLoaderStates(structure, lib, assets) {
   }
 }
 
+export const NOON = 6000
+
 const state = reactive({
   lighting: "world",
+  daytime: NOON,
   hideStructureBlocks: localStorage.getItem("hideStructureBlocks") !== "false",
   hasStructureBlocks: false,
   building: false,
@@ -184,6 +187,13 @@ const state = reactive({
   progress: null, // { phase: "build" | "optimise", done, total } while working
   info: null
 })
+
+// One live uniform shared by every world-lighting material: seeding it into a
+// template group's userData before loadModel makes the library reuse it (and
+// optimizeScene re-shares it onto atlas materials), so changing state.daytime
+// re-lights the whole scene with no rebuild.
+const daytimeUniform = { value: NOON }
+watch(() => state.daytime, v => { daytimeUniform.value = v })
 
 // ---- openable blocks (doors/trapdoors/gates): never baked into the merged
 // mesh. both open + closed models are pre-built and a toggle just flips which
@@ -422,6 +432,7 @@ async function attachEntities(structure, lib, assets) {
         }
         if (blockId) {
           const g = new THREE.Group()
+          g.userData.daytime = daytimeUniform
           for (const model of await lib.parseBlockstate(assets, blockId, { data, ignoreAtlases: true })) {
             const data = await lib.resolveModelData(assets, model)
             await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
@@ -762,6 +773,7 @@ async function build(structure = source, refit = true) {
       let tmpl = null
       if (entry && !AIR.test(entry.Name)) {
         const g = new THREE.Group()
+        g.userData.daytime = daytimeUniform
         try {
           const name = LEGACY_RENAMES[entry.Name.replace("minecraft:", "")] ?? entry.Name
           const props = fixLegacyProps(name.replace("minecraft:", ""), entry.Properties)
@@ -848,6 +860,7 @@ async function build(structure = source, refit = true) {
               THREE.MathUtils.degToRad(m.z ?? 0), "ZYX"))
             if (!canonDoorTmpl.has(key)) {
               const g = new THREE.Group()
+              g.userData.daytime = daytimeUniform
               const data = await lib.resolveModelData(assets, { ...m, x: 0, y: 0, z: 0 })
               await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
               canonDoorTmpl.set(key, g.children.length ? g : null)

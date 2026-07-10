@@ -1,6 +1,6 @@
 <script setup>
 import { useScene } from "../composables/useScene.js"
-import { useBuild } from "../composables/useBuild.js"
+import { useBuild, NOON } from "../composables/useBuild.js"
 import { useLock } from "../composables/useLock.js"
 
 const sceneApi = useScene()
@@ -18,6 +18,16 @@ const { locked } = useLock()
         <option value="world">World</option>
         <option value="off">Off</option>
       </select>
+      <template v-if="buildState.lighting === 'world'">
+        <label for="daytime">Daytime</label>
+        <div class="daytime">
+          <input id="daytime" type="range" min="0" max="23999" v-model.number="buildState.daytime">
+          <span class="value">{{ buildState.daytime }}</span>
+          <button class="reset" title="Reset to noon" :disabled="buildState.daytime === NOON" @click="buildState.daytime = NOON">
+            <span class="material-symbols-outlined">restart_alt</span>
+          </button>
+        </div>
+      </template>
     </div>
     <div class="checks">
       <label class="check">
@@ -75,4 +85,37 @@ button {
 }
 
 button .material-symbols-outlined { font-size: 18px; }
+
+.daytime {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.daytime input {
+  flex: 1;
+  min-width: 0;
+}
+
+.daytime .value {
+  flex: none;
+  min-width: 5ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.daytime .reset {
+  flex: none;
+  padding: 2px;
+}
+
+.daytime .reset:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.daytime .reset .material-symbols-outlined { font-size: 16px; }
 </style>
