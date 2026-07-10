@@ -350,9 +350,9 @@ public class BuiltinExtract {
 
   static final BoundingBox WORLD_BB = new BoundingBox(-100000, -1000, -100000, 100000, 1000, 100000);
 
-  // world position under the NORTH orientation transform
-  static BlockPos northWorldPos(BoundingBox bb, int x, int y, int z) {
-    return new BlockPos(bb.minX() + x, bb.minY() + y, bb.maxZ() - z);
+  // world position under the SOUTH orientation transform (Rotation.NONE)
+  static BlockPos southWorldPos(BoundingBox bb, int x, int y, int z) {
+    return new BlockPos(bb.minX() + x, bb.minY() + y, bb.minZ() + z);
   }
 
   static void setHeightPosition(StructurePiece piece, int v) throws Exception {
@@ -404,7 +404,7 @@ public class BuiltinExtract {
     DesertPyramidPiece[] keep = new DesertPyramidPiece[1];
     Capture cap = runTwice((c, rand) -> {
       DesertPyramidPiece piece = new DesertPyramidPiece(rand, 0, 0);
-      piece.setOrientation(Direction.NORTH);
+      piece.setOrientation(Direction.SOUTH);
       setHeightPosition(piece, 0);
       BoundingBox bb = piece.getBoundingBox();
       // desert terrain below ground level: the cellar redresses it (skipAir
@@ -428,7 +428,7 @@ public class BuiltinExtract {
     Map<String, List<BlockPos>> masks = new LinkedHashMap<>();
     Capture cap = runTwice((c, rand) -> {
       JungleTemplePiece piece = new JungleTemplePiece(rand, 0, 0);
-      piece.setOrientation(Direction.NORTH);
+      piece.setOrientation(Direction.SOUTH);
       setHeightPosition(piece, 0);
       piece.postProcess(c.level(), null, null, rand, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
       return piece;
@@ -441,7 +441,7 @@ public class BuiltinExtract {
     CannedRandom rand = runA();
     cap.random = rand;
     SwampHutPiece piece = new SwampHutPiece(rand, 0, 0);
-    piece.setOrientation(Direction.NORTH);
+    piece.setOrientation(Direction.SOUTH);
     setHeightPosition(piece, 0);
     BoundingBox bb = piece.getBoundingBox();
     cap.groundY = bb.minY(); // the stilts' fillColumnDown stops at the box
@@ -450,7 +450,7 @@ public class BuiltinExtract {
     } catch (Exception e) {
       // the witch/cat spawn needs a real ServerLevel; blocks are already done
     }
-    BlockPos wp = northWorldPos(bb, 2, 2, 5);
+    BlockPos wp = southWorldPos(bb, 2, 2, 5);
     cap.entities.add(entityTag("minecraft:witch", wp.getX() + 0.5, wp.getY(), wp.getZ() + 0.5));
     cap.entities.add(entityTag("minecraft:cat", wp.getX() + 0.5, wp.getY(), wp.getZ() + 0.5));
     write("swamp_hut", cap, null, false);
@@ -519,6 +519,15 @@ public class BuiltinExtract {
     cap.groundY = -4;
     BuriedTreasurePieces.BuriedTreasurePiece piece = new BuriedTreasurePieces.BuriedTreasurePiece(BlockPos.ZERO);
     piece.postProcess(cap.level(), null, null, cap.random, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
+    // reorient faced the chest by its neighbours; the tree entry faces north
+    BlockPos chestPos = null;
+    for (Map.Entry<BlockPos, BlockState> e : cap.placed.entrySet()) {
+      if (e.getValue().is(Blocks.CHEST)) chestPos = e.getKey();
+    }
+    if (chestPos != null) {
+      cap.placed.put(chestPos, cap.placed.get(chestPos)
+        .setValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.HORIZONTAL_FACING, Direction.NORTH));
+    }
     cap.includeWorld(-2, -4, -2, 2, -1, 2);
     write("buried_treasure", cap, null, false);
   }

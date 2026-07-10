@@ -97,7 +97,10 @@ export async function runMonument(loadStruct, { maxDepth = Infinity, seed, stats
   const rand = rnd(seed === 0 ? DEFAULT_SEED : seed ?? (Math.random() * 0x100000000) >>> 0)
   const ni = n => Math.floor(rand() * n)
 
-  const direction = HORIZ[ni(4)]
+  // the tree's default load always faces the entrance north ("south" piece
+  // orientation): the roll is still consumed so the layout stays the same
+  const rolled = HORIZ[ni(4)]
+  const direction = seed === 0 ? "south" : rolled
   const building = { dir: direction, box: makeBox(0, 39, 0, direction, 58, 23, 58) }
 
   const palette = [], palIdx = new Map()
