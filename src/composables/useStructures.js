@@ -105,7 +105,12 @@ function computeWorldgen() {
       }
     }
     starterSet = new Set(state.names.filter(n => !childRef.has(n)))
-    for (const p of PROC) for (const n of state.names) if (n.startsWith(p.prefix) && n !== p.entry) starterSet.delete(n)
+    // a proc prefix matches on path boundaries, so an entry name that is a
+    // prefix of a sibling's (end/spike vs end/spike_caged) can't hide it
+    for (const p of PROC) {
+      const pref = p.prefix.endsWith("/") ? p.prefix : p.prefix + "/"
+      for (const n of state.names) if (n !== p.entry && (n === p.prefix || n.startsWith(pref))) starterSet.delete(n)
+    }
     const procEntry = new Set(PROC.map(p => p.entry))
     standaloneSet = new Set(Array.from(starterSet).filter(n => !startMembers.has(n) && !procEntry.has(n)))
     structDepth = depth

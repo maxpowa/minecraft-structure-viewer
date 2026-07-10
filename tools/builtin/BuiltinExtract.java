@@ -523,26 +523,6 @@ public class BuiltinExtract {
     write("buried_treasure", cap, null, false);
   }
 
-  // a single guarded spike as the tree entry for the end spikes generator;
-  // the crystal (and its bedrock/fire perch) needs a real level, so it is
-  // stamped manually to match placeSpike
-  static void endSpike(String name, int radius, int height, boolean guarded) throws Exception {
-    Capture cap = new Capture();
-    cap.random = runA();
-    cap.minY = 0;
-    var spike = new net.minecraft.world.level.levelgen.feature.EndSpikeFeature.EndSpike(0, 0, radius, height, guarded);
-    var feature = new net.minecraft.world.level.levelgen.feature.EndSpikeFeature(List.of(spike), false, Optional.empty());
-    try {
-      feature.place(cap.level(), null, cap.random, BlockPos.ZERO);
-    } catch (Exception e) {
-      // the EndCrystal entity creation NPEs on the proxy; blocks are done
-    }
-    cap.set(new BlockPos(0, height, 0), Blocks.BEDROCK.defaultBlockState());
-    cap.set(new BlockPos(0, height + 1, 0), Blocks.FIRE.defaultBlockState());
-    cap.entities.add(entityTag("minecraft:end_crystal", 0.5, height + 1, 0.5));
-    write(name, cap, null, false);
-  }
-
   // ---------------------------------------------------------- nether fortress
 
   static final StructurePieceAccessor NO_COLLISION = new StructurePieceAccessor() {
@@ -716,8 +696,6 @@ public class BuiltinExtract {
     dungeon(3, 2);
     dungeon(2, 3);
     dungeon(3, 3);
-    endSpike("end/spike_caged", 2, 82, true);
-    endSpike("end/spike", 5, 103, false);
     netherFortress();
     stronghold();
     mineshaft("normal", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);

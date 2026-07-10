@@ -3,13 +3,16 @@ import { loadLibrary } from "../lib.js"
 import { usePacks } from "../composables/usePacks.js"
 import { runMonument } from "./monument.js"
 import { mineshaftPieceGens, runMineshaftRoom, runMineshaftRoomMesa } from "./mineshaft.js"
+import { runEndSpike, runEndSpikeCaged } from "./endspikes.js"
 
 // structures with no .nbt at all: the tree entry is synthesized and a load
 // runs the generator at seed 0
 export const GENERATED = {
   "minecraft/builtin/ocean_monument": runMonument,
   "minecraft/builtin/mineshaft/normal/room": runMineshaftRoom,
-  "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa
+  "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa,
+  "minecraft/builtin/end/spike": runEndSpike,
+  "minecraft/builtin/end/spike_caged": runEndSpikeCaged
 }
 for (const type of ["normal", "mesa"]) {
   for (const len of [10, 15, 20]) {
