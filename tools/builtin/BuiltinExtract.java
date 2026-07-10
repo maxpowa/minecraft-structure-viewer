@@ -589,17 +589,21 @@ public class BuiltinExtract {
     rand.intVal = 1;
     rand.script(1, 0); // corridor length 3 sections, hasRails true
     cap.random = rand;
-    cap.groundY = 10000;
     cap.heightmapY = 10000;
     BoundingBox box = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, rand, 0, 64, 0, Direction.NORTH);
-    cap.fillWorld(box.minX() - 1, box.minY() - 1, box.minZ() - 1, box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1, Blocks.STONE.defaultBlockState());
+    // invisible ceiling strips above each support so isSupportingBox passes;
+    // they're world-only, never captured, and the floor stays open so the
+    // piece lays its own plank floor like the in-app generator
+    for (int s = 0; s < 3; s++) {
+      int z = box.maxZ() - (2 + s * 5); // section z under NORTH's flip
+      cap.fillWorld(box.minX(), box.maxY() + 1, z, box.maxX(), box.maxY() + 1, z, Blocks.STONE.defaultBlockState());
+    }
     var piece = new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, rand, box, Direction.NORTH, type);
     try {
       piece.postProcess(cap.level(), null, null, rand, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
     } catch (Exception e) {
       System.out.println("[builtin] " + name + " postProcess stopped early: " + e);
     }
-    cap.includeWorld(box.minX() - 1, box.minY() - 1, box.minZ() - 1, box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1);
     write("mineshaft/" + name, cap, null, false);
   }
 
