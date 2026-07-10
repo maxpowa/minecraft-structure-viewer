@@ -27,10 +27,12 @@ function onFiles(e) {
       <div v-for="(p, i) in state.packs" :key="p.id" class="pack">
         <span class="material-symbols-outlined kind">folder_zip</span>
         <span class="name" :title="p.name">{{ p.name }}</span>
-        <button class="icon" title="Move up" :disabled="busy || i === 0"
-          @click="movePack(p.id, -1)"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
-        <button class="icon" title="Move down" :disabled="busy || i === state.packs.length - 1"
-          @click="movePack(p.id, 1)"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
+        <template v-if="state.packs.length > 1">
+          <button class="icon" title="Move up" :disabled="busy || i === 0"
+            @click="movePack(p.id, -1)"><span class="material-symbols-outlined">keyboard_arrow_up</span></button>
+          <button class="icon" title="Move down" :disabled="busy || i === state.packs.length - 1"
+            @click="movePack(p.id, 1)"><span class="material-symbols-outlined">keyboard_arrow_down</span></button>
+        </template>
         <button class="icon" title="Remove" :disabled="busy"
           @click="removePack(p.id)"><span class="material-symbols-outlined">close</span></button>
       </div>
