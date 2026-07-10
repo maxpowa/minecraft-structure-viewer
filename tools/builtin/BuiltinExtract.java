@@ -59,6 +59,7 @@ import net.minecraft.world.ticks.TickContainerAccess;
 
 public class BuiltinExtract {
   static HolderLookup.Provider REGS;
+  static Object PLAINS;
   static Path OUT;
 
   // ---------------------------------------------------------------- random
@@ -186,6 +187,7 @@ public class BuiltinExtract {
           }
           case "isInsideBuildHeight": return true;
           case "getRandom": return random;
+          case "getBiome": return PLAINS;
           case "addFreshEntity": return true;
           case "toString": return "CaptureLevel";
           case "hashCode": return System.identityHashCode(proxy);
@@ -576,6 +578,31 @@ public class BuiltinExtract {
     fortressPiece("castle_stalk_room", NetherFortressPieces.CastleStalkRoom.createPiece(NO_COLLISION, 0, 64, 0, N, 0));
   }
 
+  // --------------------------------------------------------------- mineshaft
+
+  // one sample corridor per wood type as the tree entries; the real system
+  // is generated in code. extracted inside solid stone (mineshafts redress
+  // terrain) with the tube kept as display shell, rails on, chests off
+  static void mineshaftCorridor(String name, net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type type) throws Exception {
+    Capture cap = new Capture();
+    CannedRandom rand = new CannedRandom(0.05f);
+    rand.intVal = 1;
+    rand.script(1, 0); // corridor length 3 sections, hasRails true
+    cap.random = rand;
+    cap.groundY = 10000;
+    cap.heightmapY = 10000;
+    BoundingBox box = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, rand, 0, 64, 0, Direction.NORTH);
+    cap.fillWorld(box.minX() - 1, box.minY() - 1, box.minZ() - 1, box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1, Blocks.STONE.defaultBlockState());
+    var piece = new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, rand, box, Direction.NORTH, type);
+    try {
+      piece.postProcess(cap.level(), null, null, rand, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
+    } catch (Exception e) {
+      System.out.println("[builtin] " + name + " postProcess stopped early: " + e);
+    }
+    cap.includeWorld(box.minX() - 1, box.minY() - 1, box.minZ() - 1, box.maxX() + 1, box.maxY() + 1, box.maxZ() + 1);
+    write("mineshaft/" + name, cap, null, false);
+  }
+
   // -------------------------------------------------------------- stronghold
 
   // canonical stronghold pieces: door roll scripted to OPENING, side-branch
@@ -659,6 +686,8 @@ public class BuiltinExtract {
     SharedConstants.tryDetectVersion();
     Bootstrap.bootStrap();
     REGS = worldLookup();
+    // a direct holder: is(tag) is false without needing bound datapack tags
+    PLAINS = net.minecraft.core.Holder.direct(REGS.lookupOrThrow(net.minecraft.core.registries.Registries.BIOME).getOrThrow(net.minecraft.world.level.biome.Biomes.PLAINS).value());
     OUT = Path.of(args[0]);
 
     desertPyramid();
@@ -674,6 +703,8 @@ public class BuiltinExtract {
     endSpike();
     netherFortress();
     stronghold();
+    mineshaftCorridor("corridor", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);
+    mineshaftCorridor("mesa_corridor", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.MESA);
     endPlatform();
     endGateway();
     exitPortal(false);
