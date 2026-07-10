@@ -650,25 +650,41 @@ function rayBoxT(ox, oy, oz, dx, dy, dz, x0, y0, z0, x1, y1, z1) {
 
 // per-state collision AABBs (template mesh boxes, block-centred local
 // coords), the same shapes the walker collides with. flat-plane models
-// (plants, rails...) have none, so they never block the ray
+// (plants, rails...) have none, so they never block the ray. the library
+// merges multi-element models into one mesh per material, so merged groups
+// carry the per-element boxes in userData.collision (a stair keeps its
+// stepped boxes instead of collapsing into a full cube)
 let collBoxCache = new Map()
 const _cb = new THREE.Box3()
+function templateBoxes(tmpl, arr) {
+  tmpl.updateMatrixWorld(true)
+  tmpl.traverse(o => {
+    const coll = o.userData.collision
+    if (coll) {
+      for (const c of coll) {
+        _cb.min.set(c[0], c[1], c[2])
+        _cb.max.set(c[3], c[4], c[5])
+        _cb.applyMatrix4(o.matrixWorld)
+        if (!_cb.isEmpty()) arr.push([_cb.min.x, _cb.min.y, _cb.min.z, _cb.max.x, _cb.max.y, _cb.max.z])
+      }
+      return
+    }
+    if (!o.isMesh || o.parent?.userData.collision) return
+    _cb.setFromObject(o)
+    if (!_cb.isEmpty()) arr.push([_cb.min.x, _cb.min.y, _cb.min.z, _cb.max.x, _cb.max.y, _cb.max.z])
+  })
+  return arr
+}
 function collisionBoxes(stateIdx) {
   let arr = collBoxCache.get(stateIdx)
   if (arr) return arr
   arr = []
   const tmpl = templates.get(stateIdx)
-  if (tmpl && !nonSolid.has(stateIdx)) {
-    tmpl.updateMatrixWorld(true)
-    tmpl.traverse(o => {
-      if (!o.isMesh) return
-      _cb.setFromObject(o)
-      if (!_cb.isEmpty()) arr.push([_cb.min.x, _cb.min.y, _cb.min.z, _cb.max.x, _cb.max.y, _cb.max.z])
-    })
-  }
+  if (tmpl && !nonSolid.has(stateIdx)) templateBoxes(tmpl, arr)
   collBoxCache.set(stateIdx, arr)
   return arr
 }
+
 
 // march the look ray; return the first interactable whose vanilla shape the
 // ray actually crosses: an openable ({ door }) or a loot container
@@ -798,33 +814,19 @@ function blockEntryAt(wx, wy, wz) {
   return i == null ? null : structure.blocks[i]
 }
 
-// real world-space collision AABBs of the current structure: one per template
-// mesh (a stair yields its stepped boxes, a slab a half box), per block
+// real world-space collision AABBs of the current structure: one per model
+// element (a stair yields its stepped boxes, a slab a half box), per block
 function currentBoxes() {
   const structure = current.value
   const out = []
   if (!structure || !root || !templates) return out
   const p = root.position
-  const cache = new Map(), _b = new THREE.Box3()
-  function localBoxes(tmpl) {
-    let arr = cache.get(tmpl)
-    if (arr) return arr
-    arr = []
-    tmpl.updateMatrixWorld(true)
-    tmpl.traverse(o => {
-      if (!o.isMesh) return
-      _b.setFromObject(o)
-      if (!_b.isEmpty()) arr.push([_b.min.x, _b.min.y, _b.min.z, _b.max.x, _b.max.y, _b.max.z])
-    })
-    cache.set(tmpl, arr)
-    return arr
-  }
   for (const b of structure.blocks) {
     if (nonSolid.has(b.state)) continue
-    const tmpl = templates.get(b.state)
-    if (!tmpl) continue
+    const boxes = collisionBoxes(b.state)
+    if (!boxes.length) continue
     const ox = p.x + b.pos[0] * 16, oy = p.y + b.pos[1] * 16, oz = p.z + b.pos[2] * 16
-    for (const l of localBoxes(tmpl)) out.push({ nx: l[0] + ox, ny: l[1] + oy, nz: l[2] + oz, px: l[3] + ox, py: l[4] + oy, pz: l[5] + oz })
+    for (const l of boxes) out.push({ nx: l[0] + ox, ny: l[1] + oy, nz: l[2] + oz, px: l[3] + ox, py: l[4] + oy, pz: l[5] + oz })
   }
   return out
 }
