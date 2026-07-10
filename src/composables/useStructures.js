@@ -2,6 +2,7 @@ import { reactive, readonly, watch } from "vue"
 import { loadLibrary } from "../lib.js"
 import { usePacks } from "./usePacks.js"
 import { PROC } from "../proc.js"
+import { GENERATED } from "../generators/builtin.js"
 
 // Discovery: every data/<ns>/structure/*.nbt plus the legacy/mod plural
 // data/<ns>/structures/*.nbt, across the union of all pack sources. Names are
@@ -35,8 +36,8 @@ async function populate() {
       if (m) structPath.set(m[1] + "/" + m[2], k)
     }
   }
-  state.names = Array.from(structPath.keys()).sort()
-  if (state.selected.length) state.selected = state.selected.filter(rel => structPath.has(rel))
+  state.names = Array.from(structPath.keys()).concat(Object.keys(GENERATED)).sort()
+  if (state.selected.length) state.selected = state.selected.filter(rel => has(rel))
 }
 
 async function allZipKeys() {
@@ -143,7 +144,7 @@ function visibleNames() {
 }
 
 const zipPathOf = name => structPath.get(name)
-const has = name => structPath.has(name)
+const has = name => structPath.has(name) || name in GENERATED
 const getStructDepth = name => structDepth?.get(name)
 const getStructRadius = name => structRadius?.get(name)
 

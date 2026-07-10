@@ -1,6 +1,13 @@
 import { rnd, shuffle, OPP } from "../transforms.js"
 import { loadLibrary } from "../lib.js"
 import { usePacks } from "../composables/usePacks.js"
+import { runMonument } from "./monument.js"
+
+// structures with no .nbt at all: the tree entry is synthesized and a load
+// runs the generator with a fresh seed
+export const GENERATED = {
+  "minecraft/builtin/ocean_monument": runMonument
+}
 
 // Fixers for the extracted hardcoded structures (tools/builtin). The .nbt
 // files are one canonical roll of the game's code; the .rand.json sidecars

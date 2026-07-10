@@ -7,7 +7,7 @@ import { useSession } from "./useSession.js"
 import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
 import { readLitematic, readMcstructure, readSchem } from "../formats.js"
-import { fixBuiltin } from "../generators/builtin.js"
+import { fixBuiltin, GENERATED } from "../generators/builtin.js"
 import { makeDebug } from "../debug.js"
 
 const READERS = { nbt: readStructure, litematic: readLitematic, schem: readSchem, mcstructure: readMcstructure }
@@ -200,7 +200,12 @@ async function apply(refit = true) {
 
 async function readVanilla(rel) {
   const zp = structures.zipPathOf(rel)
-  if (!zp) return null
+  if (!zp) {
+    // nbt-less builtin structures generate on load
+    const gen = GENERATED[rel]
+    if (!gen) return null
+    return (await gen()).structure
+  }
   const lib = await loadLibrary()
   const s = await readStructure(await lib.readFile(zp, packs.assets.value))
   // builtin structures with random cells load with a fresh roll
