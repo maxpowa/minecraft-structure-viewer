@@ -34,6 +34,7 @@ const sceneApi = useScene()
 const walk = useWalk()
 const walkState = walk.state
 const { locked } = useLock()
+const { state: containerState } = useContainer()
 
 const fmtK = n => n >= 1000 ? +(n / 1000).toFixed(1) + "K" : String(Math.round(n))
 
@@ -42,6 +43,14 @@ const info = computed(() => {
   if (!i) return ""
   const name = current.name ? `${current.name} · ` : ""
   return `${name}${i.size} · ${i.blocks} blocks · ${i.palette} palette entries · ${i.draws} draws · ${fmtK(i.tris)} tris`
+})
+
+// id + blockstates of the block under the pointer, under the info chip
+const aim = computed(() => {
+  const a = containerState.aim
+  if (!a) return ""
+  const props = a.props ? Object.entries(a.props).map(([k, v]) => `${k}=${v}`).join(" ") : ""
+  return props ? `${a.name} · ${props}` : a.name
 })
 
 onMounted(async () => {
@@ -98,6 +107,7 @@ onMounted(async () => {
         <div v-else-if="current.reading" class="chip">reading structures… {{ current.reading.done }}/{{ current.reading.total }}</div>
         <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
         <div v-else-if="info" class="chip">{{ info }}</div>
+        <div v-if="!current.error && aim" class="chip aim">{{ aim }}</div>
         <LevelMenu />
         <button v-if="buildState.building || current.reading" class="cancel-btn" @click="current.reading ? cancelReading() : cancelBuild()">
           <span class="material-symbols-outlined">close</span>
@@ -183,6 +193,11 @@ onMounted(async () => {
 }
 
 .chip.error { color: var(--red); }
+
+.chip.aim {
+  top: 44px;
+  font-family: ui-monospace, monospace;
+}
 
 .walk-btn {
   position: absolute;

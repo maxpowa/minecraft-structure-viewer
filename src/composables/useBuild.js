@@ -695,7 +695,8 @@ const gateOpen = e => !!(e?.Name && GATE.test(e.Name) && e.Properties?.open === 
 // march the look ray; return the first interactable whose vanilla shape the
 // ray actually crosses: an openable ({ door }) or a loot container
 // ({ container }). the ray is blocked by real collision boxes, not whole
-// cells, so it passes over slabs and through gaps like the game
+// cells, so it passes over slabs and through gaps like the game; a plain
+// blocker comes back as { block } for the aim readout
 const _aimBox = new THREE.Box3()
 function rayHit(ox, oy, oz, dx, dy, dz, REACH = 80) {
   const structure = current.value
@@ -738,7 +739,7 @@ function rayHit(ox, oy, oz, dx, dy, dz, REACH = 80) {
     const cx = bx * 16 + rx, cy = by * 16 + ry, cz = bz * 16 + rz
     for (const s of collisionBoxes(b.state)) {
       const th = rayBoxT(ox, oy, oz, dx, dy, dz, s[0] + cx, s[1] + cy, s[2] + cz, s[3] + cx, s[4] + cy, s[5] + cz)
-      if (th != null && th <= REACH) return entT < th ? { entity: entM } : null
+      if (th != null && th <= REACH) return entT < th ? { entity: entM } : { block: b }
     }
   }
   return entM ? { entity: entM } : null

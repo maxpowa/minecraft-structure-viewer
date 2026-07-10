@@ -39,6 +39,7 @@ function kindOf(name) {
 const state = reactive({
   open: false,
   pick: null,      // overlapping entities: [{ e, label }] chosen before the modal
+  aim: null,       // { name, props } of the block under the pointer
   blockName: "",
   tableId: "",
   table: null,
@@ -508,33 +509,57 @@ let downX = 0, downY = 0, downT = 0
 let hover = null
 
 // -> { block } | { marker } | null
-function inspectableUnder(e, canvas) {
+function underRay(e, canvas) {
   const root = buildApi.getRoot()
   if (!root) return null
   const r = canvas.getBoundingClientRect()
   _ndc.set((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1))
   _ray.setFromCamera(_ndc, sceneApi.camera)
   const { origin: o, direction: d } = _ray.ray
-  const h = buildApi.rayHit(o.x, o.y, o.z, d.x, d.y, d.z, 4000)
+  return buildApi.rayHit(o.x, o.y, o.z, d.x, d.y, d.z, 4000)
+}
+
+function inspectableUnder(e, canvas) {
+  const h = underRay(e, canvas)
   if (h?.entity) return { marker: h.entity }
   return h?.container ? { block: h.container } : null
 }
 
+// the id + blockstates readout for whatever the pointer rests on
+function aimFor(h) {
+  if (h?.entity) {
+    const stack = h.entity.stack ?? []
+    const name = stack.length > 1 ? `${stack.length} entities` : stripNs(stack[0]?.nbt?.id ?? "entity")
+    return { name, props: null }
+  }
+  const b = h?.door?.b ?? h?.container ?? h?.block
+  if (!b) return null
+  const e = buildApi.current.value?.palette[b.state]
+  if (!e?.Name) return null
+  return { name: stripNs(e.Name), props: e.Properties ?? null }
+}
+
 function clearHover(canvas) {
   hover?.hide()
+  state.aim = null
   // the slicers own the cursor while a gizmo is hovered or dragged
   if (!useSlicers().busy()) canvas.style.cursor = ""
 }
 
 function hoverCheck(e, canvas) {
   if (document.pointerLockElement || state.open || e.buttons || useSlicers().busy()) return clearHover(canvas)
-  const u = inspectableUnder(e, canvas)
+  const h = underRay(e, canvas)
+  state.aim = aimFor(h)
+  const u = h?.entity ? { marker: h.entity } : h?.container ? { block: h.container } : null
   const box = u?.marker ? buildApi.boxForEntity(u.marker) : u?.block ? buildApi.boxForBlock(u.block) : null
   if (box) {
     hover ??= sceneApi.makeHighlight()
     hover.show(box)
     canvas.style.cursor = "pointer"
-  } else clearHover(canvas)
+  } else {
+    hover?.hide()
+    if (!useSlicers().busy()) canvas.style.cursor = ""
+  }
 }
 
 function initPicking(canvas) {
