@@ -717,7 +717,7 @@ public class BuiltinExtract {
     dungeon(2, 3);
     dungeon(3, 3);
     endSpike("end/spike_caged", 2, 82, true);
-    endSpike("end/spike_uncaged", 5, 103, false);
+    endSpike("end/spike", 5, 103, false);
     netherFortress();
     stronghold();
     mineshaft("normal", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);
