@@ -204,12 +204,13 @@ async function readVanilla(rel) {
     // nbt-less builtin structures generate on load
     const gen = GENERATED[rel]
     if (!gen) return null
-    return (await gen()).structure
+    return (await gen(undefined, { seed: 0 })).structure
   }
   const lib = await loadLibrary()
   const s = await readStructure(await lib.readFile(zp, packs.assets.value))
-  // builtin structures with random cells load with a fresh roll
-  return fixBuiltin(rel, s)
+  // randomised builtin structures load deterministically at seed 0; the
+  // session's Re-roll picks a fresh seed (and puts it in the url)
+  return fixBuiltin(rel, s, 0)
 }
 
 // the sidebar's visual order: with a search active it is the flat result

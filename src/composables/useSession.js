@@ -9,7 +9,7 @@ import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
 import { AIR, EMPTY, JIGSAW, mix, parseState, poolTemplates } from "../transforms.js"
 import { runJigsaw } from "../jigsaw.js"
-import { runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
+import { rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
 import { PROC } from "../proc.js"
 
 // A level session exists for jigsaw structures (any palette block named
@@ -34,6 +34,7 @@ const state = reactive({
   kind: null,     // "jigsaw" | a PROC gen name
   label: "Structure Blocks",
   steps: true,
+  reroll: false,  // one-shot random re-fix of a single structure file
   level: 0,
   maxDepth: 7,
   seed: null,
@@ -83,6 +84,9 @@ async function loadPool(ref) {
 const generators = {
   igloo: runIgloo, end_city: runEndCity, mansion: runMansion,
   jungle_temple: runJungleTemple, desert_pyramid: runDesertPyramid, desert_well: runDesertWell, dungeon: runDungeon,
+  dungeon_7x5: rerollGen("minecraft/builtin/dungeon/7x5"),
+  dungeon_5x7: rerollGen("minecraft/builtin/dungeon/5x7"),
+  dungeon_7x7: rerollGen("minecraft/builtin/dungeon/7x7"),
   fortress: runFortress, end_spikes: runEndSpikes, stronghold: runStronghold,
   mineshaft: runMineshaft, mineshaft_mesa: runMineshaftMesa, monument: runMonument
 }
@@ -238,11 +242,13 @@ async function startSession(structure, name) {
     state.kind = proc.gen
     state.label = proc.label
     state.steps = proc.steps
+    state.reroll = !!proc.reroll
     state.maxDepth = proc.maxDepth ?? 1
   } else if (isJigsaw && await jigsawsCanAct(structure)) {
     state.kind = "jigsaw"
     state.label = "Structure Blocks"
     state.steps = true
+    state.reroll = false
     await structures.computeWorldgen()
     // pieces with no structure def (mid-generation pieces, unmapped modded
     // ones) get generous caps: the stop-short clamp shrinks them to the
@@ -275,6 +281,7 @@ function endSession() {
   prevAnchorWorld = null
   state.active = false
   state.kind = null
+  state.reroll = false
   state.level = 0
   state.seed = null
   syncUrl()

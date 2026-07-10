@@ -189,8 +189,8 @@ export async function fixBuiltin(rel, structure, seed = (Math.random() * 0x10000
   return structure
 }
 
-// one-shot session generators (Regenerate re-rolls with the session seed)
-const rerollGen = rel => async (loadStruct, { seed } = {}) => {
+// one-shot session generators (Re-roll re-fixes with the session seed)
+export const rerollGen = rel => async (loadStruct, { seed } = {}) => {
   const s = await loadStruct(rel.replace(/^minecraft\//, ""))
   return { structure: await fixBuiltin(rel, s, seed), maxDepth: 1 }
 }
