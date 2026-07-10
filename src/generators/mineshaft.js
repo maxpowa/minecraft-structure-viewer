@@ -13,8 +13,8 @@ import { mirrorState, mix, rnd, rotateState } from "../transforms.js"
 // their section supports and hang their ends from a virtual ceiling 8 blocks
 // above the structure's highest point; suspended crossings lose the corner
 // pillars nothing is standing over. the cave outline ships on the structure
-// so the viewer can draw it. the start room gets a fabricated dirt floor so
-// the entry piece is visible; stair pieces are pure carves like the game.
+// so the viewer can draw it. the start room gets a fabricated dirt floor
+// and the stair carves get stone treads, so those pieces are visible.
 
 const TYPES = {
   normal: { wood: "minecraft:oak_log", planks: "minecraft:oak_planks", fence: "minecraft:oak_fence" },
@@ -352,14 +352,27 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
       }
 
       if (p.kind === "stairs") {
-        // pure carve, like the game (the steps themselves are terrain)
+        // the game only carves; the steps themselves are terrain. fabricate
+        // a stone tread under the lowest carved block of each column so the
+        // staircase shows, on untouched cells only (a carved cell below is a
+        // real hole)
         const w = (x, y, z, s, props) => placeOriented(p, x, y, z, s, props)
+        const lowest = new Map()
         const carve = (x0, y0, z0, x1, y1, z1) => {
-          for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) w(x, y, z, "minecraft:cave_air")
+          for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+            w(x, y, z, "minecraft:cave_air")
+            const k = x + "," + z
+            if (y < (lowest.get(k) ?? Infinity)) lowest.set(k, y)
+          }
         }
         carve(0, 5, 0, 2, 7, 1)
         carve(0, 0, 7, 2, 2, 8)
         for (let i = 0; i < 5; i++) carve(0, 5 - i - (i < 4 ? 1 : 0), 2 + i, 2, 7 - i, 2 + i)
+        for (const [k, y] of lowest) {
+          const [x, z] = k.split(",").map(Number)
+          const [wx, wy, wz] = orient(p, x, y - 1, z)
+          if (!cells.has(key(wx, wy, wz))) place(wx, wy, wz, "minecraft:stone")
+        }
         continue
       }
 
