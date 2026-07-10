@@ -687,6 +687,10 @@ function collisionBoxes(stateIdx) {
   return arr
 }
 
+// open fence gates have no collision in game: you walk through the cell
+const GATE = /_fence_gate$/
+const gateOpen = e => !!(e?.Name && GATE.test(e.Name) && e.Properties?.open === "true")
+
 
 // march the look ray; return the first interactable whose vanilla shape the
 // ray actually crosses: an openable ({ door }) or a loot container
@@ -822,7 +826,7 @@ function blockBoxes(b) {
   const structure = current.value
   const out = []
   if (!structure || !root) return out
-  if (nonSolid.has(b.state)) return out
+  if (nonSolid.has(b.state) || gateOpen(structure.palette[b.state])) return out
   const p = root.position
   const ox = p.x + b.pos[0] * 16, oy = p.y + b.pos[1] * 16, oz = p.z + b.pos[2] * 16
   const key = b.pos.join(",")
