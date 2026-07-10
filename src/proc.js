@@ -14,7 +14,7 @@ export const PROC = [
   { prefix: "minecraft/builtin/nether_fortress/", entry: "minecraft/builtin/nether_fortress/bridge_crossing", label: "Nether Fortress", gen: "fortress", steps: true, maxDepth: 30 },
   { prefix: "minecraft/builtin/end_spike", entry: "minecraft/builtin/end_spike", label: "End Spikes", gen: "end_spikes", steps: false },
   { prefix: "minecraft/builtin/stronghold/", entry: "minecraft/builtin/stronghold/stairs_down", label: "Stronghold", gen: "stronghold", steps: true, maxDepth: 50 },
-  { prefix: "minecraft/builtin/mineshaft/corridor", entry: "minecraft/builtin/mineshaft/corridor", label: "Mineshaft", gen: "mineshaft", steps: true, maxDepth: 9 },
-  { prefix: "minecraft/builtin/mineshaft/mesa_corridor", entry: "minecraft/builtin/mineshaft/mesa_corridor", label: "Badlands Mineshaft", gen: "mineshaft_mesa", steps: true, maxDepth: 9 },
+  { prefix: "minecraft/builtin/mineshaft/normal/", entry: "minecraft/builtin/mineshaft/normal/corridor", label: "Mineshaft", gen: "mineshaft", steps: true, maxDepth: 9 },
+  { prefix: "minecraft/builtin/mineshaft/mesa/", entry: "minecraft/builtin/mineshaft/mesa/corridor", label: "Badlands Mineshaft", gen: "mineshaft_mesa", steps: true, maxDepth: 9 },
   { prefix: "minecraft/builtin/ocean_monument", entry: "minecraft/builtin/ocean_monument", label: "Ocean Monument", gen: "monument", steps: false }
 ]

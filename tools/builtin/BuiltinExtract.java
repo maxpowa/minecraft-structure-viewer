@@ -583,28 +583,60 @@ public class BuiltinExtract {
   // one sample corridor per wood type as the tree entries; the real system
   // is generated in code. extracted inside solid stone (mineshafts redress
   // terrain) with the tube kept as display shell, rails on, chests off
-  static void mineshaftCorridor(String name, net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type type) throws Exception {
-    Capture cap = new Capture();
+  static CannedRandom mineshaftRandom(int... script) {
     CannedRandom rand = new CannedRandom(0.05f);
     rand.intVal = 1;
-    rand.script(1, 0); // corridor length 3 sections, hasRails true
-    cap.random = rand;
-    cap.heightmapY = 10000;
-    BoundingBox box = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, rand, 0, 64, 0, Direction.NORTH);
-    // invisible ceiling strips above each support so isSupportingBox passes;
-    // they're world-only, never captured, and the floor stays open so the
-    // piece lays its own plank floor like the in-app generator
-    for (int s = 0; s < 3; s++) {
-      int z = box.maxZ() - (2 + s * 5); // section z under NORTH's flip
-      cap.fillWorld(box.minX(), box.maxY() + 1, z, box.maxX(), box.maxY() + 1, z, Blocks.STONE.defaultBlockState());
-    }
-    var piece = new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, rand, box, Direction.NORTH, type);
+    rand.script(script);
+    return rand;
+  }
+
+  static void mineshaftPiece(String name, Capture cap, StructurePiece piece) throws Exception {
     try {
-      piece.postProcess(cap.level(), null, null, rand, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
+      piece.postProcess(cap.level(), null, null, cap.random, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
     } catch (Exception e) {
       System.out.println("[builtin] " + name + " postProcess stopped early: " + e);
     }
     write("mineshaft/" + name, cap, null, false);
+  }
+
+  static void mineshaft(String folder, net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type type) throws Exception {
+    // corridor: 3 sections with rails. invisible world-only ceiling strips
+    // above each support keep isSupportingBox passing; the floor stays open
+    // so the piece lays its own plank floor like the in-app generator
+    Capture cap = new Capture();
+    cap.random = mineshaftRandom(1, 0); // length 3 sections, hasRails true
+    cap.heightmapY = 10000;
+    BoundingBox box = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, cap.random, 0, 64, 0, Direction.NORTH);
+    for (int s = 0; s < 3; s++) {
+      int z = box.maxZ() - (2 + s * 5); // section z under NORTH's flip
+      cap.fillWorld(box.minX(), box.maxY() + 1, z, box.maxX(), box.maxY() + 1, z, Blocks.STONE.defaultBlockState());
+    }
+    mineshaftPiece(folder + "/corridor", cap, new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, cap.random, box, Direction.NORTH, type));
+
+    // crossings: support pillars need a solid roof above their four spots
+    for (boolean tall : new boolean[]{ false, true }) {
+      Capture c = new Capture();
+      c.random = mineshaftRandom(tall ? 0 : 1); // the nextInt(4)==0 roll picks two floors
+      c.heightmapY = 10000;
+      BoundingBox cb = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCrossing.findCrossing(NO_COLLISION, c.random, 0, 64, 0, Direction.NORTH);
+      for (int px : new int[]{ cb.minX() + 1, cb.maxX() - 1 })
+        for (int pz : new int[]{ cb.minZ() + 1, cb.maxZ() - 1 })
+          c.fillWorld(px, cb.maxY() + 1, pz, px, cb.maxY() + 1, pz, Blocks.STONE.defaultBlockState());
+      mineshaftPiece(folder + (tall ? "/crossing_two_floored" : "/crossing"), c,
+        new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCrossing(0, cb, Direction.NORTH, type));
+    }
+
+    // room: the game only carves it out of the ground, so a dirt floor rides
+    // along for the standalone view, like the generator fabricates
+    Capture r = new Capture();
+    r.random = mineshaftRandom(3, 3, 3); // mid-size span rolls
+    r.heightmapY = 10000;
+    var room = new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftRoom(0, r.random, 0, 0, type);
+    BoundingBox rb = room.getBoundingBox();
+    r.fillWorld(rb.minX(), rb.minY(), rb.minZ(), rb.maxX(), rb.minY(), rb.maxZ(), Blocks.DIRT.defaultBlockState());
+    room.postProcess(r.level(), null, null, r.random, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
+    r.includeWorld(rb.minX(), rb.minY(), rb.minZ(), rb.maxX(), rb.minY(), rb.maxZ());
+    write("mineshaft/" + folder + "/room", r, null, false);
   }
 
   // -------------------------------------------------------------- stronghold
@@ -707,8 +739,8 @@ public class BuiltinExtract {
     endSpike();
     netherFortress();
     stronghold();
-    mineshaftCorridor("corridor", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);
-    mineshaftCorridor("mesa_corridor", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.MESA);
+    mineshaft("normal", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);
+    mineshaft("mesa", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.MESA);
     endPlatform();
     endGateway();
     exitPortal(false);
