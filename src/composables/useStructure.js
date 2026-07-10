@@ -107,8 +107,8 @@ function packLoaded() {
   const cells = loaded.map(({ structure: s }, i) => ({
     s,
     name: paths[i].slice(common).join("/"),
-    gw: s.size[0] + 6 + (s.size[0] % 2),
-    gd: s.size[2] + 6 + (s.size[2] % 2)
+    gw: s.size[0] + 6,
+    gd: s.size[2] + 6
   }))
   const W = Math.max(Math.ceil(Math.sqrt(cells.reduce((a, c) => a + (c.gw + GAP) * (c.gd + GAP), 0))), ...cells.map(c => c.gw))
   const placed = []

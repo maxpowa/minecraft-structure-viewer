@@ -924,9 +924,8 @@ async function build(structure = source, refit = true) {
     animator = lib.createAnimator(root)
     sceneApi.animators.add(animator)
     useSlicers().onBuild(root, position, [sx, sy, sz])
-    // one floor grid per structure part, hugging its footprint with a 3-block
-    // border (4 on one side when needed to keep the size even, so the centre
-    // cross lands on a block boundary)
+    // one floor grid per structure part, hugging its footprint with a
+    // 3-block border on every side
     const parts = structure.__parts ?? [{ off: [0, 0, 0], size: structure.size }]
     // a structure carrying a cave (mineshafts) gets a wireframe of the cave
     // volume, and the floor grid hides where it falls into the cave. the
@@ -936,7 +935,7 @@ async function build(structure = source, refit = true) {
     if (structure.cave) {
       const c = structure.cave
       const p0 = parts[0]
-      const gw = p0.size[0] + 6 + (p0.size[0] % 2), gd = p0.size[2] + 6 + (p0.size[2] % 2)
+      const gw = p0.size[0] + 6, gd = p0.size[2] + 6
       const xMin = p0.off[0] - 3, zMin = p0.off[2] - 3
       const cells = new Set()
       for (const [x, z] of c.cells) {
@@ -959,7 +958,7 @@ async function build(structure = source, refit = true) {
       }
     }
     sceneApi.setGrids(parts.map(p => {
-      const gw = p.size[0] + 6 + (p.size[0] % 2), gd = p.size[2] + 6 + (p.size[2] % 2)
+      const gw = p.size[0] + 6, gd = p.size[2] + 6
       return {
         x: position.x + (p.off[0] - 3) * 16 - 8,
         z: position.z + (p.off[2] - 3) * 16 - 8,
