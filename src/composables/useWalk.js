@@ -85,6 +85,34 @@ function buildCollision() {
   floorY = sceneApi.sceneBounds().min.y
 }
 
+// a door or gate toggled: swap just that block's boxes in the hash instead
+// of rebuilding the whole scene's collision (seconds on big combinations)
+function updateCollision(blocks) {
+  const p = buildApi.getRoot()?.position
+  if (!p) return
+  const fc = v => Math.floor(v / 16)
+  for (const b of blocks) {
+    const key = b.pos.join(",")
+    const nx = p.x + b.pos[0] * 16 - 8, ny = p.y + b.pos[1] * 16 - 8, nz = p.z + b.pos[2] * 16 - 8
+    for (let ci = fc(nx); ci <= fc(nx + 16); ci++)
+      for (let cj = fc(ny); cj <= fc(ny + 16); cj++)
+        for (let ck = fc(nz); ck <= fc(nz + 16); ck++) {
+          const k = ci + "," + cj + "," + ck
+          const arr = collHash.get(k)
+          if (arr?.some(o => o.key === key)) collHash.set(k, arr.filter(o => o.key !== key))
+        }
+    for (const box of buildApi.blockBoxes(b))
+      for (let ci = fc(box.nx); ci <= fc(box.px); ci++)
+        for (let cj = fc(box.ny); cj <= fc(box.py); cj++)
+          for (let ck = fc(box.nz); ck <= fc(box.pz); ck++) {
+            const k = ci + "," + cj + "," + ck
+            let a = collHash.get(k)
+            if (!a) collHash.set(k, a = [])
+            a.push(box)
+          }
+  }
+}
+
 const paabb = () => ({ nx: walk.pos.x - PW, px: walk.pos.x + PW, ny: walk.pos.y, py: walk.pos.y + walk.h, nz: walk.pos.z - PW, pz: walk.pos.z + PW })
 const overlaps = (a, b) => !(a.px <= b.nx || a.nx >= b.px || a.py <= b.ny || a.ny >= b.py || a.pz <= b.nz || a.nz >= b.pz)
 
@@ -631,7 +659,7 @@ addEventListener("mousedown", e => {
   const d = new THREE.Vector3()
   perspCam.getWorldDirection(d)
   const r = buildApi.interact(perspCam.position.x, perspCam.position.y, perspCam.position.z, d.x, d.y, d.z)
-  if (r === true) buildCollision()
+  if (r?.toggled) updateCollision(r.toggled)
   else if (r?.entity) {
     suspend()
     containerApi.openEntityMarker(r.entity)

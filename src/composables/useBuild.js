@@ -624,11 +624,13 @@ function markerUnderRay(ray, maxDist) {
 function toggleDoor(reg) {
   const structure = current.value
   const open = structure.palette[reg.b.state].Properties.open !== "true"
-  for (const r of reg.pair ? [reg, reg.pair] : [reg]) {
+  const regs = reg.pair ? [reg, reg.pair] : [reg]
+  for (const r of regs) {
     r.b.state = open ? r.openIdx : r.closedIdx
     setDoorInstance(r.openIdx, r.openSlot, r.b.pos, open)
     setDoorInstance(r.closedIdx, r.closedSlot, r.b.pos, !open)
   }
+  return regs.map(r => r.b)
 }
 
 // ray vs axis-aligned box: entry t, or null when it misses
@@ -738,14 +740,12 @@ function rayHit(ox, oy, oz, dx, dy, dz, REACH = 80) {
   return entM ? { entity: entM } : null
 }
 
-// act on the thing being looked at: toggles a door (true), hands back a
-// loot container block or { entity }, or false when nothing is in reach
+// act on the thing being looked at: toggles a door ({ toggled: blocks }),
+// hands back a loot container block or { entity }, or false when nothing
+// is in reach
 function interact(ox, oy, oz, dx, dy, dz) {
   const h = rayHit(ox, oy, oz, dx, dy, dz)
-  if (h?.door) {
-    toggleDoor(h.door)
-    return true
-  }
+  if (h?.door) return { toggled: toggleDoor(h.door) }
   if (h?.entity) return { entity: h.entity }
   return h?.container ?? false
 }
@@ -815,19 +815,26 @@ function blockEntryAt(wx, wy, wz) {
 }
 
 // real world-space collision AABBs of the current structure: one per model
-// element (a stair yields its stepped boxes, a slab a half box), per block
+// element (a stair yields its stepped boxes, a slab a half box), per block.
+// each box carries its block's cell key so a door toggle can swap just that
+// cell's boxes in the walker's spatial hash
+function blockBoxes(b) {
+  const structure = current.value
+  const out = []
+  if (!structure || !root) return out
+  if (nonSolid.has(b.state)) return out
+  const p = root.position
+  const ox = p.x + b.pos[0] * 16, oy = p.y + b.pos[1] * 16, oz = p.z + b.pos[2] * 16
+  const key = b.pos.join(",")
+  for (const l of collisionBoxes(b.state)) out.push({ nx: l[0] + ox, ny: l[1] + oy, nz: l[2] + oz, px: l[3] + ox, py: l[4] + oy, pz: l[5] + oz, key })
+  return out
+}
+
 function currentBoxes() {
   const structure = current.value
   const out = []
   if (!structure || !root || !templates) return out
-  const p = root.position
-  for (const b of structure.blocks) {
-    if (nonSolid.has(b.state)) continue
-    const boxes = collisionBoxes(b.state)
-    if (!boxes.length) continue
-    const ox = p.x + b.pos[0] * 16, oy = p.y + b.pos[1] * 16, oz = p.z + b.pos[2] * 16
-    for (const l of boxes) out.push({ nx: l[0] + ox, ny: l[1] + oy, nz: l[2] + oz, px: l[3] + ox, py: l[4] + oy, pz: l[5] + oz })
-  }
+  for (const b of structure.blocks) out.push(...blockBoxes(b))
   return out
 }
 
@@ -1258,6 +1265,6 @@ const getNonSolid = () => nonSolid
 export function useBuild() {
   return {
     state, current, build, cancel, answerWarn, getRoot, getTemplates, getNonSolid, showFull, restoreFull,
-    blockAt, blockEntryAt, boxForBlock, boxForEntity, markerUnderRay, rayHit, interact, aimDoor, currentBoxes, exportCurrent
+    blockAt, blockEntryAt, boxForBlock, boxForEntity, markerUnderRay, rayHit, interact, aimDoor, currentBoxes, blockBoxes, exportCurrent
   }
 }
