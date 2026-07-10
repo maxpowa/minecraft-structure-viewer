@@ -359,14 +359,18 @@ public class BuiltinExtract {
 
   interface PieceRun { StructurePiece run(Capture cap, CannedRandom rand) throws Exception; }
 
+  static Capture runTwice(PieceRun body, Map<String, List<BlockPos>> masks, java.util.function.Function<BlockPos, String> classify) throws Exception {
+    return runTwice(body, masks, classify, runA(), runB());
+  }
+
   // runs the piece twice (canonical + divergent random) and returns the
   // canonical capture plus the diff cells, classified by the given namer
-  static Capture runTwice(PieceRun body, Map<String, List<BlockPos>> masks, java.util.function.Function<BlockPos, String> classify) throws Exception {
+  static Capture runTwice(PieceRun body, Map<String, List<BlockPos>> masks, java.util.function.Function<BlockPos, String> classify, CannedRandom randA, CannedRandom randB) throws Exception {
     Capture capA = new Capture();
-    capA.random = runA();
+    capA.random = randA;
     body.run(capA, capA.random);
     Capture capB = new Capture();
-    capB.random = runB();
+    capB.random = randB;
     body.run(capB, capB.random);
     if (!capA.placed.keySet().equals(capB.placed.keySet()))
       System.out.println("[builtin] WARN diff runs placed different cells (structural divergence)");
@@ -572,6 +576,62 @@ public class BuiltinExtract {
     fortressPiece("castle_stalk_room", NetherFortressPieces.CastleStalkRoom.createPiece(NO_COLLISION, 0, 64, 0, N, 0));
   }
 
+  // -------------------------------------------------------------- stronghold
+
+  // canonical stronghold pieces: door roll scripted to OPENING, side-branch
+  // bools false, floats 0.9 vs 0.35 so the two runs differ on exactly the
+  // SmoothStoneSelector edge cells (torches 0.1, cobwebs 0.07 and portal eyes
+  // 0.9 stay put in both runs and are re-rolled in JS at known coordinates)
+  interface StrongholdMake { StructurePiece make(CannedRandom rand) throws Exception; }
+
+  static void strongholdPiece(String name, int[] script, StrongholdMake make) throws Exception {
+    Map<String, List<BlockPos>> masks = new LinkedHashMap<>();
+    Capture cap = runTwice((c, rand) -> {
+      rand.script(script);
+      // strongholds are carved through solid rock: the skipAir shells only
+      // redress existing blocks, so the whole world reads as stone
+      c.groundY = 10000;
+      StructurePiece piece = make.make(rand);
+      if (piece == null) throw new IllegalStateException(name + ": createPiece returned null");
+      piece.postProcess(c.level(), null, null, rand, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
+      return piece;
+    }, masks, p -> "stone", new CannedRandom(0.9f, false), new CannedRandom(0.35f, false));
+    // rerun canonically to get the piece for its bounding box
+    CannedRandom rand = new CannedRandom(0.9f, false);
+    rand.script(script);
+    StructurePiece piece = make.make(rand);
+    write("stronghold/" + name, cap, piece.getBoundingBox(), true, masks);
+  }
+
+  static void stronghold() throws Exception {
+    var acc = NO_COLLISION;
+    Direction N = Direction.NORTH;
+    // door roll 0 = OPENING; straight also pins leftChild/rightChild to false
+    strongholdPiece("straight", new int[]{ 0, 1, 1 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.Straight.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("prison_hall", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.PrisonHall.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("left_turn", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.LeftTurn.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("right_turn", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.RightTurn.createPiece(acc, r, 0, 64, 0, N, 1));
+    for (int type = 0; type <= 3; type++) {
+      final int t = type;
+      strongholdPiece("room_crossing_" + t, new int[]{ 0, t }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.RoomCrossing.createPiece(acc, r, 0, 64, 0, N, 1));
+    }
+    strongholdPiece("straight_stairs_down", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.StraightStairsDown.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("stairs_down", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.StairsDown.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("five_crossing", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.FiveCrossing.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("chest_corridor", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.ChestCorridor.createPiece(acc, r, 0, 64, 0, N, 1));
+    strongholdPiece("library", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.Library.createPiece(acc, r, 0, 64, 0, N, 1));
+    // the short library exists when the tall box does not fit: fake a
+    // collision for 11-high boxes so createPiece takes the shrink path
+    StructurePieceAccessor shortAcc = new StructurePieceAccessor() {
+      public void addPiece(StructurePiece piece) {}
+      public StructurePiece findCollisionPiece(BoundingBox box) {
+        return box.getYSpan() > 6 ? new BuriedTreasurePieces.BuriedTreasurePiece(new BlockPos(9999, 9999, 9999)) : null;
+      }
+    };
+    strongholdPiece("library_short", new int[]{ 0 }, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.Library.createPiece(shortAcc, r, 0, 64, 0, N, 1));
+    strongholdPiece("portal_room", new int[]{}, r -> net.minecraft.world.level.levelgen.structure.structures.StrongholdPieces.PortalRoom.createPiece(acc, 0, 64, 0, N, 1));
+  }
+
   // ------------------------------------------------------------- structures
 
   static void endPlatform() throws Exception {
@@ -613,6 +673,7 @@ public class BuiltinExtract {
     dungeon(3, 3);
     endSpike();
     netherFortress();
+    stronghold();
     endPlatform();
     endGateway();
     exitPortal(false);

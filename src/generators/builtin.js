@@ -10,7 +10,7 @@ import { usePacks } from "../composables/usePacks.js"
 
 const AIRISH = /(^|:)(cave_)?air$/
 
-async function readMasks(name) {
+export async function readMasks(name) {
   const packs = usePacks()
   const lib = await loadLibrary()
   const buf = await lib.readFile(`data/minecraft/structure/builtin/${name}.rand.json`, packs.assets.value)
