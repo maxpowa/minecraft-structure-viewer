@@ -7,6 +7,7 @@ import { useSession } from "./useSession.js"
 import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
 import { readLitematic, readMcstructure, readSchem } from "../formats.js"
+import { fixBuiltin } from "../generators/builtin.js"
 import { makeDebug } from "../debug.js"
 
 const READERS = { nbt: readStructure, litematic: readLitematic, schem: readSchem, mcstructure: readMcstructure }
@@ -201,7 +202,9 @@ async function readVanilla(rel) {
   const zp = structures.zipPathOf(rel)
   if (!zp) return null
   const lib = await loadLibrary()
-  return readStructure(await lib.readFile(zp, packs.assets.value))
+  const s = await readStructure(await lib.readFile(zp, packs.assets.value))
+  // builtin structures with random cells load with a fresh roll
+  return fixBuiltin(rel, s)
 }
 
 // the sidebar's visual order: with a search active it is the flat result
