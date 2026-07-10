@@ -24,9 +24,14 @@ export const PROC = [
   // session; the random pieces get their own re-roll sessions
   { prefix: "minecraft/builtin/mineshaft/normal/", entry: "minecraft/builtin/mineshaft/normal/room", label: "Mineshaft", gen: "mineshaft", steps: true, maxDepth: 9 },
   { prefix: "minecraft/builtin/mineshaft/mesa/", entry: "minecraft/builtin/mineshaft/mesa/room", label: "Badlands Mineshaft", gen: "mineshaft_mesa", steps: true, maxDepth: 9 },
-  { prefix: "minecraft/builtin/mineshaft/normal/corridor", entry: "minecraft/builtin/mineshaft/normal/corridor", label: "Mineshaft Corridor", gen: "mineshaft_corridor", steps: false, reroll: true },
-  { prefix: "minecraft/builtin/mineshaft/mesa/corridor", entry: "minecraft/builtin/mineshaft/mesa/corridor", label: "Mineshaft Corridor", gen: "mineshaft_corridor_mesa", steps: false, reroll: true },
-  { prefix: "minecraft/builtin/mineshaft/normal/spider_corridor", entry: "minecraft/builtin/mineshaft/normal/spider_corridor", label: "Spider Corridor", gen: "spider_corridor", steps: false, reroll: true },
-  { prefix: "minecraft/builtin/mineshaft/mesa/spider_corridor", entry: "minecraft/builtin/mineshaft/mesa/spider_corridor", label: "Spider Corridor", gen: "spider_corridor_mesa", steps: false, reroll: true },
   { prefix: "minecraft/builtin/ocean_monument", entry: "minecraft/builtin/ocean_monument", label: "Ocean Monument", gen: "monument", steps: false }
 ]
+
+// corridors come in three fixed lengths, one tree entry each
+for (const type of ["normal", "mesa"]) {
+  for (const len of [10, 15, 20]) {
+    const at = name => `minecraft/builtin/mineshaft/${type}/${name}_${len}`
+    PROC.push({ prefix: at("corridor"), entry: at("corridor"), label: "Mineshaft Corridor", gen: `mineshaft_${type}_corridor_${len}`, steps: false, reroll: true })
+    PROC.push({ prefix: at("spider_corridor"), entry: at("spider_corridor"), label: "Spider Corridor", gen: `mineshaft_${type}_spider_corridor_${len}`, steps: false, reroll: true })
+  }
+}

@@ -16,8 +16,9 @@ const TYPES = {
 
 // single: null generates the whole shaft system; "corridor",
 // "spider_corridor" or "room" generate one piece with its in-game rolls
-// (corridor length and rails, spider webs and spawner spot, room size)
-export function makeMineshaft(typeName, single = null) {
+// (rails, spider webs and spawner spot, room size). corridors have three
+// fixed lengths in game, so each is its own tree entry via fixedSections.
+export function makeMineshaft(typeName, single = null, fixedSections = null) {
   const T = TYPES[typeName]
 
   return async function runMineshaft(loadStruct, { maxDepth = Infinity, seed } = {}) {
@@ -44,7 +45,7 @@ export function makeMineshaft(typeName, single = null) {
     if (single === "room") {
       pieces.push(makeRoom())
     } else if (single) {
-      const sections = ni(3) + 2
+      const sections = fixedSections ?? ni(3) + 2
       const hasRails = single === "corridor" && ni(3) === 0
       pieces.push({
         kind: "corridor", dir: "south", genDepth: 0, sections, hasRails,
@@ -430,9 +431,14 @@ export function makeMineshaft(typeName, single = null) {
 
 export const runMineshaft = makeMineshaft("normal")
 export const runMineshaftMesa = makeMineshaft("mesa")
-export const runMineshaftCorridor = makeMineshaft("normal", "corridor")
-export const runMineshaftCorridorMesa = makeMineshaft("mesa", "corridor")
-export const runSpiderCorridor = makeMineshaft("normal", "spider_corridor")
-export const runSpiderCorridorMesa = makeMineshaft("mesa", "spider_corridor")
 export const runMineshaftRoom = makeMineshaft("normal", "room")
 export const runMineshaftRoomMesa = makeMineshaft("mesa", "room")
+
+// one generator per corridor kind and fixed length, keyed by gen name
+export const mineshaftPieceGens = {}
+for (const type of ["normal", "mesa"]) {
+  for (const sections of [2, 3, 4]) {
+    mineshaftPieceGens[`mineshaft_${type}_corridor_${sections * 5}`] = makeMineshaft(type, "corridor", sections)
+    mineshaftPieceGens[`mineshaft_${type}_spider_corridor_${sections * 5}`] = makeMineshaft(type, "spider_corridor", sections)
+  }
+}

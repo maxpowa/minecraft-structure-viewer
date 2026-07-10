@@ -2,18 +2,20 @@ import { rnd, shuffle, OPP } from "../transforms.js"
 import { loadLibrary } from "../lib.js"
 import { usePacks } from "../composables/usePacks.js"
 import { runMonument } from "./monument.js"
-import { runMineshaftCorridor, runMineshaftCorridorMesa, runMineshaftRoom, runMineshaftRoomMesa, runSpiderCorridor, runSpiderCorridorMesa } from "./mineshaft.js"
+import { mineshaftPieceGens, runMineshaftRoom, runMineshaftRoomMesa } from "./mineshaft.js"
 
 // structures with no .nbt at all: the tree entry is synthesized and a load
 // runs the generator at seed 0
 export const GENERATED = {
   "minecraft/builtin/ocean_monument": runMonument,
-  "minecraft/builtin/mineshaft/normal/corridor": runMineshaftCorridor,
-  "minecraft/builtin/mineshaft/normal/spider_corridor": runSpiderCorridor,
   "minecraft/builtin/mineshaft/normal/room": runMineshaftRoom,
-  "minecraft/builtin/mineshaft/mesa/corridor": runMineshaftCorridorMesa,
-  "minecraft/builtin/mineshaft/mesa/spider_corridor": runSpiderCorridorMesa,
   "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa
+}
+for (const type of ["normal", "mesa"]) {
+  for (const len of [10, 15, 20]) {
+    GENERATED[`minecraft/builtin/mineshaft/${type}/corridor_${len}`] = mineshaftPieceGens[`mineshaft_${type}_corridor_${len}`]
+    GENERATED[`minecraft/builtin/mineshaft/${type}/spider_corridor_${len}`] = mineshaftPieceGens[`mineshaft_${type}_spider_corridor_${len}`]
+  }
 }
 
 // Fixers for the extracted hardcoded structures (tools/builtin). The .nbt
