@@ -526,21 +526,21 @@ public class BuiltinExtract {
   // a single guarded spike as the tree entry for the end spikes generator;
   // the crystal (and its bedrock/fire perch) needs a real level, so it is
   // stamped manually to match placeSpike
-  static void endSpike() throws Exception {
+  static void endSpike(String name, int radius, int height, boolean guarded) throws Exception {
     Capture cap = new Capture();
     cap.random = runA();
     cap.minY = 0;
-    var spike = new net.minecraft.world.level.levelgen.feature.EndSpikeFeature.EndSpike(0, 0, 2, 82, true);
+    var spike = new net.minecraft.world.level.levelgen.feature.EndSpikeFeature.EndSpike(0, 0, radius, height, guarded);
     var feature = new net.minecraft.world.level.levelgen.feature.EndSpikeFeature(List.of(spike), false, Optional.empty());
     try {
       feature.place(cap.level(), null, cap.random, BlockPos.ZERO);
     } catch (Exception e) {
       // the EndCrystal entity creation NPEs on the proxy; blocks are done
     }
-    cap.set(new BlockPos(0, 82, 0), Blocks.BEDROCK.defaultBlockState());
-    cap.set(new BlockPos(0, 83, 0), Blocks.FIRE.defaultBlockState());
-    cap.entities.add(entityTag("minecraft:end_crystal", 0.5, 83, 0.5));
-    write("end_spike", cap, null, false);
+    cap.set(new BlockPos(0, height, 0), Blocks.BEDROCK.defaultBlockState());
+    cap.set(new BlockPos(0, height + 1, 0), Blocks.FIRE.defaultBlockState());
+    cap.entities.add(entityTag("minecraft:end_crystal", 0.5, height + 1, 0.5));
+    write(name, cap, null, false);
   }
 
   // ---------------------------------------------------------- nether fortress
@@ -680,13 +680,13 @@ public class BuiltinExtract {
   static void endPlatform() throws Exception {
     Capture cap = new Capture();
     EndPlatformFeature.createEndPlatform(cap.level(), new BlockPos(0, 0, 0), false);
-    write("end_platform", cap, null, false);
+    write("end/platform", cap, null, false);
   }
 
   static void endGateway() throws Exception {
     Capture cap = new Capture();
     new EndGatewayFeature(Optional.empty(), false).place(cap.level(), null, new CannedRandom(0.9f), new BlockPos(0, 0, 0));
-    write("end_gateway", cap, null, false);
+    write("end/gateway", cap, null, false);
   }
 
   static void exitPortal(boolean active) throws Exception {
@@ -695,7 +695,7 @@ public class BuiltinExtract {
     new EndPodiumFeature(active).place(cap.level(), null, new CannedRandom(0.9f), origin);
     // the first dragon fight leaves the egg on the pillar (EnderDragonFight)
     if (active) cap.set(origin.above(4), Blocks.DRAGON_EGG.defaultBlockState());
-    write(active ? "exit_portal_active" : "exit_portal", cap, null, false);
+    write(active ? "end/exit_portal/active" : "end/exit_portal/inactive", cap, null, false);
   }
 
   public static void main(String[] args) throws Exception {
@@ -716,7 +716,8 @@ public class BuiltinExtract {
     dungeon(3, 2);
     dungeon(2, 3);
     dungeon(3, 3);
-    endSpike();
+    endSpike("end/spike_caged", 2, 82, true);
+    endSpike("end/spike_uncaged", 5, 103, false);
     netherFortress();
     stronghold();
     mineshaft("normal", net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type.NORMAL);

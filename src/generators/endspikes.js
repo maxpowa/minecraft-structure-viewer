@@ -1,12 +1,16 @@
 import { rnd, shuffle } from "../transforms.js"
 
-// end spikes (EndSpikeFeature): ten obsidian pillars on a radius-42 ring.
-// sizes 0-9 are shuffled per seed; radius 2 + size/3, height 76 + size*3,
-// the two smallest guarded sizes (1 and 2) get iron bar cages. each pillar
-// tops out with bedrock, fire and an end crystal. built in code: shapes are
-// parametric, nothing to extract.
+// end spikes (EndSpikeFeature): ten obsidian pillars on a radius-42 ring
+// around the exit portal. sizes 0-9 are shuffled per seed; radius
+// 2 + size/3, height 76 + size*3, the two smallest guarded sizes (1 and 2)
+// get iron bar cages. each pillar tops out with bedrock, fire and an end
+// crystal. pillars are built in code (parametric shapes); the exit portal
+// rides in from its extracted nbt, in the state the session started from.
 
-export async function runEndSpikes(loadStruct, { seed } = {}) {
+// the podium's portal ring sits at the End's surface height
+const PORTAL_Y = 62
+
+export const makeEndSpikes = active => async (loadStruct, { seed } = {}) => {
   const rand = rnd(seed ?? (Math.random() * 0x100000000) >>> 0)
   const sizes = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], rand)
 
@@ -68,6 +72,18 @@ export async function runEndSpikes(loadStruct, { seed } = {}) {
     entities.push({ pos: [cx + 0.5, height + 1, cz + 0.5], nbt: { id: "minecraft:end_crystal" } })
   }
 
+  // the exit portal at the ring's centre
+  const portal = await loadStruct("builtin/end/exit_portal/" + (active ? "active" : "inactive"))
+  if (portal) {
+    const off = [-Math.floor(portal.size[0] / 2), PORTAL_Y, -Math.floor(portal.size[2] / 2)]
+    const map = portal.palette.map(e => stateFor(e.Name, e.Properties))
+    for (const b of portal.blocks) {
+      const block = { state: map[b.state], pos: [b.pos[0] + off[0], b.pos[1] + off[1], b.pos[2] + off[2]] }
+      if (b.nbt) block.nbt = b.nbt
+      blocks.push(block)
+    }
+  }
+
   const lo = [Infinity, 0, Infinity], hi = [-Infinity, 0, -Infinity]
   for (const b of blocks) {
     lo[0] = Math.min(lo[0], b.pos[0]); lo[2] = Math.min(lo[2], b.pos[2])
@@ -85,3 +101,6 @@ export async function runEndSpikes(loadStruct, { seed } = {}) {
     maxDepth: 1
   }
 }
+
+export const runEndSpikes = makeEndSpikes(false)
+export const runEndSpikesActive = makeEndSpikes(true)

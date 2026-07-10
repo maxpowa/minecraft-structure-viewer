@@ -9,7 +9,7 @@ import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
 import { AIR, EMPTY, JIGSAW, mix, parseState, poolTemplates } from "../transforms.js"
 import { runJigsaw } from "../jigsaw.js"
-import { mineshaftPieceGens, rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
+import { mineshaftPieceGens, rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runEndSpikesActive, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
 import { PROC } from "../proc.js"
 
 // A level session exists for jigsaw structures (any palette block named
@@ -87,7 +87,7 @@ const generators = {
   dungeon_7x5: rerollGen("minecraft/builtin/dungeon/7x5"),
   dungeon_5x7: rerollGen("minecraft/builtin/dungeon/5x7"),
   dungeon_7x7: rerollGen("minecraft/builtin/dungeon/7x7"),
-  fortress: runFortress, end_spikes: runEndSpikes, stronghold: runStronghold,
+  fortress: runFortress, end_spikes: runEndSpikes, end_spikes_active: runEndSpikesActive, stronghold: runStronghold,
   mineshaft: runMineshaft, mineshaft_mesa: runMineshaftMesa, monument: runMonument,
   ...mineshaftPieceGens
 }
