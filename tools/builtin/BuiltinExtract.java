@@ -67,13 +67,16 @@ public class BuiltinExtract {
   static class CannedRandom implements RandomSource {
     float floatVal;
     boolean boolVal;
+    int intVal; // nextInt(bound) result once the script runs out
+    final ArrayDeque<Integer> script = new ArrayDeque<>(); // consumed first by nextInt(bound)
     CannedRandom(float f) { this(f, false); }
     CannedRandom(float f, boolean b) { floatVal = f; boolVal = b; }
+    CannedRandom script(int... vs) { for (int v : vs) script.add(v); return this; }
     public RandomSource fork() { return new CannedRandom(floatVal, boolVal); }
     public net.minecraft.world.level.levelgen.PositionalRandomFactory forkPositional() { throw new UnsupportedOperationException("forkPositional"); }
     public void setSeed(long seed) {}
     public int nextInt() { return 0; }
-    public int nextInt(int bound) { return 0; }
+    public int nextInt(int bound) { return Math.min(script.isEmpty() ? intVal : script.poll(), bound - 1); }
     public long nextLong() { return 0; }
     public boolean nextBoolean() { return boolVal; }
     public float nextFloat() { return floatVal; }
@@ -474,6 +477,29 @@ public class BuiltinExtract {
     write("bonus_chest", cap, null, false);
   }
 
+  // dungeon (MonsterRoomFeature): a Feature whose walls are pre-existing
+  // terrain. each size variant is extracted inside a stone pocket with one
+  // doorway hole; the viewer's generator picks the variant and re-rolls the
+  // floor, spawner mob and chests per seed like the game
+  static void dungeon(int xs, int zs) throws Exception {
+    int xr = xs - 2, zr = zs - 2; // the nextInt(2) rolls behind each size
+    Map<String, List<BlockPos>> masks = new LinkedHashMap<>();
+    Capture cap = runTwice((c, rand) -> {
+      rand.script(xr, zr);
+      if (rand.boolVal) rand.intVal = 1; // divergent run: floor rolls mossy
+      c.fillWorld(-xs - 2, -2, -zs - 2, xs + 2, 5, zs + 2, Blocks.STONE.defaultBlockState());
+      // one wall opening so the hole-count gate passes (1..5 needed)
+      c.world.put(new BlockPos(xs + 1, 0, 0), Blocks.AIR.defaultBlockState());
+      c.world.put(new BlockPos(xs + 1, 1, 0), Blocks.AIR.defaultBlockState());
+      if (!new net.minecraft.world.level.levelgen.feature.MonsterRoomFeature().place(c.level(), null, rand, BlockPos.ZERO))
+        throw new IllegalStateException("dungeon refused to place");
+      // the untouched stone ceiling caps the room like the cave roof in game
+      c.includeWorld(-xs - 1, 4, -zs - 1, xs + 1, 4, zs + 1);
+      return null;
+    }, masks, p -> p.getY() == -1 ? "floor" : null);
+    write("dungeon/" + (xs * 2 + 1) + "x" + (zs * 2 + 1), cap, null, false, masks);
+  }
+
   static void buriedTreasure() throws Exception {
     Capture cap = new Capture();
     cap.random = runA();
@@ -521,6 +547,10 @@ public class BuiltinExtract {
     desertWell();
     bonusChest();
     buriedTreasure();
+    dungeon(2, 2);
+    dungeon(3, 2);
+    dungeon(2, 3);
+    dungeon(3, 3);
     endPlatform();
     endGateway();
     exitPortal(false);
