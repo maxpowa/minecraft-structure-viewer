@@ -291,7 +291,7 @@ watch(() => [state.open, state.stacks, state.gui], () => {
           <span v-else></span>
           <div class="right">
             <button :disabled="rendering" @click="container.addRoll()">
-              <span class="material-symbols-outlined">casino</span>
+              <span class="material-symbols-outlined">shuffle</span>
               Add Roll
             </button>
             <button :disabled="rendering" title="Add 100 rolls" @click="container.addRoll(100)">
