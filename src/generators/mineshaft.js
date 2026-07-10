@@ -14,7 +14,10 @@ const TYPES = {
   mesa: { wood: "minecraft:dark_oak_log", planks: "minecraft:dark_oak_planks", fence: "minecraft:dark_oak_fence" }
 }
 
-export function makeMineshaft(typeName) {
+// single: null generates the whole shaft system; "corridor",
+// "spider_corridor" or "room" generate one piece with its in-game rolls
+// (corridor length and rails, spider webs and spawner spot, room size)
+export function makeMineshaft(typeName, single = null) {
   const T = TYPES[typeName]
 
   return async function runMineshaft(loadStruct, { maxDepth = Infinity, seed } = {}) {
@@ -32,11 +35,26 @@ export function makeMineshaft(typeName) {
         && p.box.minZ <= box.maxZ && p.box.maxZ >= box.minZ)
     }
 
-    const room = {
+    const makeRoom = () => ({
       kind: "room", dir: null, genDepth: 0, entrances: [],
       box: { minX: 0, minY: 50, minZ: 0, maxX: 7 + ni(6), maxY: 54 + ni(6), maxZ: 7 + ni(6) }
+    })
+
+    let room = null
+    if (single === "room") {
+      pieces.push(makeRoom())
+    } else if (single) {
+      const sections = ni(3) + 2
+      const hasRails = single === "corridor" && ni(3) === 0
+      pieces.push({
+        kind: "corridor", dir: "south", genDepth: 0, sections, hasRails,
+        spider: single === "spider_corridor",
+        box: { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 2, maxZ: sections * 5 - 1 }
+      })
+    } else {
+      room = makeRoom()
+      pieces.push(room)
     }
-    pieces.push(room)
 
     function findCorridorSize(fx, fy, fz, dir) {
       for (let L = ni(3) + 2; L > 0; L--) {
@@ -196,7 +214,7 @@ export function makeMineshaft(typeName) {
       }
     }
 
-    addChildren(room)
+    if (room) addChildren(room)
 
     // ---- block emission into one world-space cell map, piece order
 
@@ -412,3 +430,9 @@ export function makeMineshaft(typeName) {
 
 export const runMineshaft = makeMineshaft("normal")
 export const runMineshaftMesa = makeMineshaft("mesa")
+export const runMineshaftCorridor = makeMineshaft("normal", "corridor")
+export const runMineshaftCorridorMesa = makeMineshaft("mesa", "corridor")
+export const runSpiderCorridor = makeMineshaft("normal", "spider_corridor")
+export const runSpiderCorridorMesa = makeMineshaft("mesa", "spider_corridor")
+export const runMineshaftRoom = makeMineshaft("normal", "room")
+export const runMineshaftRoomMesa = makeMineshaft("mesa", "room")

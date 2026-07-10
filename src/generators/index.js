@@ -5,5 +5,5 @@ export { fixBuiltin, rerollGen, runDesertPyramid, runDesertWell, runDungeon, run
 export { runFortress } from "./fortress.js"
 export { runEndSpikes } from "./endspikes.js"
 export { runStronghold } from "./stronghold.js"
-export { runMineshaft, runMineshaftMesa } from "./mineshaft.js"
+export { runMineshaft, runMineshaftCorridor, runMineshaftCorridorMesa, runMineshaftMesa, runMineshaftRoom, runMineshaftRoomMesa, runSpiderCorridor, runSpiderCorridorMesa } from "./mineshaft.js"
 export { runMonument } from "./monument.js"

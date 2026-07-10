@@ -2,11 +2,18 @@ import { rnd, shuffle, OPP } from "../transforms.js"
 import { loadLibrary } from "../lib.js"
 import { usePacks } from "../composables/usePacks.js"
 import { runMonument } from "./monument.js"
+import { runMineshaftCorridor, runMineshaftCorridorMesa, runMineshaftRoom, runMineshaftRoomMesa, runSpiderCorridor, runSpiderCorridorMesa } from "./mineshaft.js"
 
 // structures with no .nbt at all: the tree entry is synthesized and a load
-// runs the generator with a fresh seed
+// runs the generator at seed 0
 export const GENERATED = {
-  "minecraft/builtin/ocean_monument": runMonument
+  "minecraft/builtin/ocean_monument": runMonument,
+  "minecraft/builtin/mineshaft/normal/corridor": runMineshaftCorridor,
+  "minecraft/builtin/mineshaft/normal/spider_corridor": runSpiderCorridor,
+  "minecraft/builtin/mineshaft/normal/room": runMineshaftRoom,
+  "minecraft/builtin/mineshaft/mesa/corridor": runMineshaftCorridorMesa,
+  "minecraft/builtin/mineshaft/mesa/spider_corridor": runSpiderCorridorMesa,
+  "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa
 }
 
 // Fixers for the extracted hardcoded structures (tools/builtin). The .nbt

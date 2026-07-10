@@ -20,7 +20,13 @@ export const PROC = [
   { prefix: "minecraft/builtin/nether_fortress/", entry: "minecraft/builtin/nether_fortress/bridge_crossing", label: "Nether Fortress", gen: "fortress", steps: true, maxDepth: 30 },
   { prefix: "minecraft/builtin/end_spike", entry: "minecraft/builtin/end_spike", label: "End Spikes", gen: "end_spikes", steps: false },
   { prefix: "minecraft/builtin/stronghold/", entry: "minecraft/builtin/stronghold/stairs_down", label: "Stronghold", gen: "stronghold", steps: true, maxDepth: 50 },
-  { prefix: "minecraft/builtin/mineshaft/normal/", entry: "minecraft/builtin/mineshaft/normal/corridor", label: "Mineshaft", gen: "mineshaft", steps: true, maxDepth: 9 },
-  { prefix: "minecraft/builtin/mineshaft/mesa/", entry: "minecraft/builtin/mineshaft/mesa/corridor", label: "Badlands Mineshaft", gen: "mineshaft_mesa", steps: true, maxDepth: 9 },
+  // the room is the game's start piece, so it hosts the full mineshaft
+  // session; the random pieces get their own re-roll sessions
+  { prefix: "minecraft/builtin/mineshaft/normal/", entry: "minecraft/builtin/mineshaft/normal/room", label: "Mineshaft", gen: "mineshaft", steps: true, maxDepth: 9 },
+  { prefix: "minecraft/builtin/mineshaft/mesa/", entry: "minecraft/builtin/mineshaft/mesa/room", label: "Badlands Mineshaft", gen: "mineshaft_mesa", steps: true, maxDepth: 9 },
+  { prefix: "minecraft/builtin/mineshaft/normal/corridor", entry: "minecraft/builtin/mineshaft/normal/corridor", label: "Mineshaft Corridor", gen: "mineshaft_corridor", steps: false, reroll: true },
+  { prefix: "minecraft/builtin/mineshaft/mesa/corridor", entry: "minecraft/builtin/mineshaft/mesa/corridor", label: "Mineshaft Corridor", gen: "mineshaft_corridor_mesa", steps: false, reroll: true },
+  { prefix: "minecraft/builtin/mineshaft/normal/spider_corridor", entry: "minecraft/builtin/mineshaft/normal/spider_corridor", label: "Spider Corridor", gen: "spider_corridor", steps: false, reroll: true },
+  { prefix: "minecraft/builtin/mineshaft/mesa/spider_corridor", entry: "minecraft/builtin/mineshaft/mesa/spider_corridor", label: "Spider Corridor", gen: "spider_corridor_mesa", steps: false, reroll: true },
   { prefix: "minecraft/builtin/ocean_monument", entry: "minecraft/builtin/ocean_monument", label: "Ocean Monument", gen: "monument", steps: false }
 ]

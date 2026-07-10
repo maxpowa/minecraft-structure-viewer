@@ -601,33 +601,9 @@ public class BuiltinExtract {
     write("mineshaft/" + name, cap, null, false);
   }
 
+  // only the crossings are extracted: the corridors and the room are random
+  // in game (length, rails, webs, size), so the viewer generates them
   static void mineshaft(String folder, net.minecraft.world.level.levelgen.structure.structures.MineshaftStructure.Type type) throws Exception {
-    // corridor: 3 sections with rails. invisible world-only ceiling strips
-    // above each support keep isSupportingBox passing; the floor stays open
-    // so the piece lays its own plank floor like the in-app generator
-    Capture cap = new Capture();
-    cap.random = mineshaftRandom(1, 0); // length 3 sections, hasRails true
-    cap.heightmapY = 10000;
-    BoundingBox box = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, cap.random, 0, 64, 0, Direction.NORTH);
-    for (int s = 0; s < 3; s++) {
-      int z = box.maxZ() - (2 + s * 5); // section z under NORTH's flip
-      cap.fillWorld(box.minX(), box.maxY() + 1, z, box.maxX(), box.maxY() + 1, z, Blocks.STONE.defaultBlockState());
-    }
-    mineshaftPiece(folder + "/corridor", cap, new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, cap.random, box, Direction.NORTH, type));
-
-    // spider corridor: no rails, cobwebs and the cave spider spawner. the
-    // probabilistic web fills use a seeded float stream so they come out at
-    // their natural densities
-    Capture sp = new Capture();
-    sp.random = mineshaftRandom(1, 1, 0).floats(42); // length 3, no rails, spider
-    sp.heightmapY = 10000;
-    BoundingBox sb = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, sp.random, 0, 64, 0, Direction.NORTH);
-    for (int s = 0; s < 3; s++) {
-      int z = sb.maxZ() - (2 + s * 5);
-      sp.fillWorld(sb.minX(), sb.maxY() + 1, z, sb.maxX(), sb.maxY() + 1, z, Blocks.STONE.defaultBlockState());
-    }
-    mineshaftPiece(folder + "/spider_corridor", sp, new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, sp.random, sb, Direction.NORTH, type));
-
     // crossings: support pillars need a solid roof above their four spots
     for (boolean tall : new boolean[]{ false, true }) {
       Capture c = new Capture();
@@ -641,17 +617,6 @@ public class BuiltinExtract {
         new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCrossing(0, cb, Direction.NORTH, type));
     }
 
-    // room: the game only carves it out of the ground, so a dirt floor rides
-    // along for the standalone view, like the generator fabricates
-    Capture r = new Capture();
-    r.random = mineshaftRandom(3, 3, 3); // mid-size span rolls
-    r.heightmapY = 10000;
-    var room = new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftRoom(0, r.random, 0, 0, type);
-    BoundingBox rb = room.getBoundingBox();
-    r.fillWorld(rb.minX(), rb.minY(), rb.minZ(), rb.maxX(), rb.minY(), rb.maxZ(), Blocks.DIRT.defaultBlockState());
-    room.postProcess(r.level(), null, null, r.random, WORLD_BB, new ChunkPos(0, 0), BlockPos.ZERO);
-    r.includeWorld(rb.minX(), rb.minY(), rb.minZ(), rb.maxX(), rb.minY(), rb.maxZ());
-    write("mineshaft/" + folder + "/room", r, null, false);
   }
 
   // -------------------------------------------------------------- stronghold
