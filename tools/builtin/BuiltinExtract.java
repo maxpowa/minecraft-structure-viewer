@@ -71,10 +71,12 @@ public class BuiltinExtract {
     float floatVal;
     boolean boolVal;
     int intVal; // nextInt(bound) result once the script runs out
+    Random floatSeq; // when set, nextFloat rolls a seeded stream instead
     final ArrayDeque<Integer> script = new ArrayDeque<>(); // consumed first by nextInt(bound)
     CannedRandom(float f) { this(f, false); }
     CannedRandom(float f, boolean b) { floatVal = f; boolVal = b; }
     CannedRandom script(int... vs) { for (int v : vs) script.add(v); return this; }
+    CannedRandom floats(long seed) { floatSeq = new Random(seed); return this; }
     public RandomSource fork() { return new CannedRandom(floatVal, boolVal); }
     public net.minecraft.world.level.levelgen.PositionalRandomFactory forkPositional() { throw new UnsupportedOperationException("forkPositional"); }
     public void setSeed(long seed) {}
@@ -82,7 +84,7 @@ public class BuiltinExtract {
     public int nextInt(int bound) { return Math.min(script.isEmpty() ? intVal : script.poll(), bound - 1); }
     public long nextLong() { return 0; }
     public boolean nextBoolean() { return boolVal; }
-    public float nextFloat() { return floatVal; }
+    public float nextFloat() { return floatSeq != null ? floatSeq.nextFloat() : floatVal; }
     public double nextDouble() { return floatVal; }
     public double nextGaussian() { return 0; }
   }
@@ -612,6 +614,19 @@ public class BuiltinExtract {
       cap.fillWorld(box.minX(), box.maxY() + 1, z, box.maxX(), box.maxY() + 1, z, Blocks.STONE.defaultBlockState());
     }
     mineshaftPiece(folder + "/corridor", cap, new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, cap.random, box, Direction.NORTH, type));
+
+    // spider corridor: no rails, cobwebs and the cave spider spawner. the
+    // probabilistic web fills use a seeded float stream so they come out at
+    // their natural densities
+    Capture sp = new Capture();
+    sp.random = mineshaftRandom(1, 1, 0).floats(42); // length 3, no rails, spider
+    sp.heightmapY = 10000;
+    BoundingBox sb = net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor.findCorridorSize(NO_COLLISION, sp.random, 0, 64, 0, Direction.NORTH);
+    for (int s = 0; s < 3; s++) {
+      int z = sb.maxZ() - (2 + s * 5);
+      sp.fillWorld(sb.minX(), sb.maxY() + 1, z, sb.maxX(), sb.maxY() + 1, z, Blocks.STONE.defaultBlockState());
+    }
+    mineshaftPiece(folder + "/spider_corridor", sp, new net.minecraft.world.level.levelgen.structure.structures.MineshaftPieces.MineShaftCorridor(0, sp.random, sb, Direction.NORTH, type));
 
     // crossings: support pillars need a solid roof above their four spots
     for (boolean tall : new boolean[]{ false, true }) {
