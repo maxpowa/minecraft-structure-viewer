@@ -53,7 +53,7 @@ const open = ref(false)
         </button>
       </template>
       <button v-else :disabled="locked" @click="session.generate()">
-        <span class="material-symbols-outlined">casino</span>
+        <span class="material-symbols-outlined">{{ s.reroll || s.level > 0 ? "shuffle" : "construction" }}</span>
         {{ s.reroll ? "Re-roll" : s.level > 0 ? "Regenerate" : "Generate" }}
       </button>
       <button v-if="buildState.hasStructureBlocks" :disabled="locked" @click="buildState.hideStructureBlocks = !buildState.hideStructureBlocks">
