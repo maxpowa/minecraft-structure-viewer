@@ -28,7 +28,7 @@ const libError = ref("")
 const canvasEl = ref(null)
 const { loadBase } = usePacks()
 const structures = useStructures()
-const { state: current, structure, loadVanilla, loadMany, loadDebug } = useStructure()
+const { state: current, structure, loadVanilla, loadMany, loadDebug, cancelReading } = useStructure()
 const { state: buildState, cancel: cancelBuild } = useBuild()
 const sceneApi = useScene()
 const walk = useWalk()
@@ -95,10 +95,11 @@ onMounted(async () => {
       <!-- walking hides the viewport chrome: only the crosshair + hint show -->
       <template v-if="!walkState.on">
         <div v-if="current.error" class="chip error">{{ current.error }}</div>
+        <div v-else-if="current.reading" class="chip">reading structures… {{ current.reading.done }}/{{ current.reading.total }}</div>
         <div v-else-if="buildState.status" class="chip">{{ buildState.status }}</div>
         <div v-else-if="info" class="chip">{{ info }}</div>
         <LevelMenu />
-        <button v-if="buildState.building" class="cancel-btn" @click="cancelBuild()">
+        <button v-if="buildState.building || current.reading" class="cancel-btn" @click="current.reading ? cancelReading() : cancelBuild()">
           <span class="material-symbols-outlined">close</span>
           Cancel
         </button>

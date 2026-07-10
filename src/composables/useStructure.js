@@ -10,6 +10,7 @@ import { readLitematic, readMcstructure, readSchem } from "../formats.js"
 import { useWorld } from "./useWorld.js"
 import { fixBuiltin, GENERATED } from "../generators/builtin.js"
 import { makeDebug } from "../debug.js"
+import { yieldTask } from "../yield.js"
 
 const READERS = { nbt: readStructure, litematic: readLitematic, schem: readSchem, mcstructure: readMcstructure }
 const COMBINE_AIR = /(^|:)(air|cave_air|void_air|structure_void)$/
@@ -24,10 +25,33 @@ const session = useSession()
 const { locked, withLock } = useLock()
 
 const structure = buildApi.current
-const state = reactive({ name: "", error: "" })
+const state = reactive({ name: "", error: "", reading: null })
 
 // [{ structure, name, rel? }]: rel present when it came from the vanilla tree
 let loaded = []
+
+// reading hundreds of nbts takes seconds: surface progress and let the
+// cancel button abort before anything is committed. returns null on cancel
+let cancelRead = false
+function cancelReading() { cancelRead = true }
+async function readMany(rels, reuse) {
+  cancelRead = false
+  state.reading = { done: 0, total: rels.length }
+  try {
+    const entries = []
+    for (const rel of rels) {
+      const s = reuse?.get(rel) ?? await readVanilla(rel)
+      if (s) entries.push({ structure: s, name: rel, rel })
+      if (++state.reading.done % 25 === 0) {
+        await yieldTask()
+        if (cancelRead) return null
+      }
+    }
+    return entries
+  } finally {
+    state.reading = null
+  }
+}
 
 // multi-structure lists are deflate + base64url encoded ("!<data>") to keep
 // the url short: the shared path prefixes compress well. structure names
@@ -98,7 +122,7 @@ addEventListener("popstate", async () => {
 // each grid takes the frontmost (then leftmost) pocket it fits in, so small
 // grids fill the space beside big ones. returns one combined structure with
 // __parts describing where each one landed
-function packLoaded() {
+async function packLoaded() {
   const GAP = 3
   // labels drop the folder prefix every loaded structure shares, keeping
   // whatever distinguishes them (leaf only when siblings, longer paths when
@@ -114,20 +138,56 @@ function packLoaded() {
   }))
   const W = Math.max(Math.ceil(Math.sqrt(cells.reduce((a, c) => a + (c.gw + GAP) * (c.gd + GAP), 0))), ...cells.map(c => c.gw))
   const placed = []
-  const fits = (x, z, w, d) =>
-    x >= 0 && x + w <= W &&
-    !placed.some(p => x < p.x + p.w + GAP && p.x < x + w + GAP && z < p.z + p.d + GAP && p.z < z + d + GAP)
+  // placed rects live in coarse spatial buckets so each fits() only tests
+  // nearby cells instead of re-scanning everything placed so far
+  const B = 128
+  const buckets = new Map()
+  function addRect(p) {
+    for (let bx = Math.floor(p.x / B); bx <= Math.floor((p.x + p.w) / B); bx++)
+      for (let bz = Math.floor(p.z / B); bz <= Math.floor((p.z + p.d) / B); bz++) {
+        const k = bx + "," + bz
+        let arr = buckets.get(k)
+        if (!arr) buckets.set(k, arr = [])
+        arr.push(p)
+      }
+  }
+  let stamp = 0
+  function fits(x, z, w, d) {
+    if (x < 0 || x + w > W) return false
+    stamp++
+    for (let bx = Math.floor((x - GAP) / B); bx <= Math.floor((x + w + GAP) / B); bx++)
+      for (let bz = Math.floor((z - GAP) / B); bz <= Math.floor((z + d + GAP) / B); bz++) {
+        const arr = buckets.get(bx + "," + bz)
+        if (!arr) continue
+        for (const p of arr) {
+          if (p.stamp === stamp) continue
+          p.stamp = stamp
+          if (x < p.x + p.w + GAP && p.x < x + w + GAP && z < p.z + p.d + GAP && p.z < z + d + GAP) return false
+        }
+      }
+    return true
+  }
   const parts = []
+  let sliceT = performance.now()
   for (const c of cells) {
+    if (performance.now() - sliceT > 40) {
+      await yieldTask()
+      sliceT = performance.now()
+    }
     const candidates = [[0, 0]]
     for (const p of placed) candidates.push([p.x + p.w + GAP, p.z], [p.x, p.z + p.d + GAP])
     let best = null
     for (const [x, z] of candidates) {
+      // fits() only filters, so candidates that can't beat the current best
+      // are skipped before the (comparatively expensive) overlap test
+      if (best && (z > best[1] || (z === best[1] && x >= best[0]))) continue
       if (!fits(x, z, c.gw, c.gd)) continue
-      if (!best || z < best[1] || (z === best[1] && x < best[0])) best = [x, z]
+      best = [x, z]
     }
     best ??= [0, Math.max(0, ...placed.map(p => p.z + p.d + GAP))]
-    placed.push({ x: best[0], z: best[1], w: c.gw, d: c.gd })
+    const rect = { x: best[0], z: best[1], w: c.gw, d: c.gd }
+    placed.push(rect)
+    addRect(rect)
     parts.push({ s: c.s, name: c.name, off: [best[0] + 3, 0, best[1] + 3], size: c.s.size })
   }
   const palette = [], byKey = new Map()
@@ -144,7 +204,11 @@ function packLoaded() {
   const blocks = []
   const entities = []
   let mx = 1, my = 1, mz = 1
+  let merged = 0
   for (const p of parts) {
+    // the merge is a long synchronous stretch on big combinations: yield
+    // periodically so the page stays responsive
+    if (++merged % 40 === 0) await yieldTask()
     const map = p.s.palette.map(e => e?.Name ? stateFor(e) : 0)
     // air never renders and air-beside-me culls like nothing-beside-me, so
     // a combination drops it: all-structure loads are mostly air entries
@@ -199,7 +263,7 @@ async function apply(refit = true) {
     const rels = loaded.map(e => e.rel)
     structures.stateMut.selected = rels.filter(Boolean)
     setVanillaParam(rels.every(Boolean) ? await encodeRels(rels) : null)
-    if (await buildApi.build(packLoaded(), refit) === false) return false
+    if (await buildApi.build(await packLoaded(), refit) === false) return false
     session.endSession()
   }
 }
@@ -269,13 +333,9 @@ function loadVanilla(rel, ev) {
       if (shift && anchor != null && anchor !== rel && order.has(anchor) && order.has(rel)) {
         const [lo, hi] = [order.get(anchor), order.get(rel)].sort((a, b) => a - b)
         const range = Array.from(order.entries()).filter(([, i]) => i >= lo && i <= hi).map(([r]) => r)
-        const entries = []
-        for (const r of range) {
-          const existing = loaded.find(e => e.rel === r)
-          const s = existing?.structure ?? await readVanilla(r)
-          if (s) entries.push({ structure: s, name: r, rel: r })
-        }
-        if (!entries.length) return
+        const reuse = new Map(loaded.filter(e => e.rel).map(e => [e.rel, e.structure]))
+        const entries = await readMany(range, reuse)
+        if (!entries?.length) return
         loaded = entries
       } else if (ctrl && loaded.length) {
         const at = loaded.findIndex(e => e.rel === rel)
@@ -309,12 +369,8 @@ function loadMany(rels) {
     state.error = ""
     const snap = snapshot()
     try {
-      const entries = []
-      for (const rel of new Set(rels)) {
-        const s = await readVanilla(rel)
-        if (s) entries.push({ structure: s, name: rel, rel })
-      }
-      if (!entries.length) return
+      const entries = await readMany([...new Set(rels)])
+      if (!entries?.length) return
       loaded = entries
       sortLoaded(visualOrder())
       anchor = loaded.at(-1)?.rel ?? null
@@ -396,7 +452,7 @@ async function onAssetsSwapped() {
         if (s) e.structure = s
       } catch {}
     }
-    await buildApi.build(packLoaded(), false)
+    await buildApi.build(await packLoaded(), false)
     return
   }
   // no args: rebuild the build's own source (current may be a display strip)
@@ -405,5 +461,5 @@ async function onAssetsSwapped() {
 packs.setSwapHandler(onAssetsSwapped)
 
 export function useStructure() {
-  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug }
+  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug, cancelReading }
 }

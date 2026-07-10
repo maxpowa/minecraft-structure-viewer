@@ -3,14 +3,18 @@
 // template groups over as placements. optimise(structure, templates,
 // position, { lib, getCullFaces, setStatus }) -> { group, atlasTextures,
 // drawCalls, tris }
+import { yieldTask } from "./yield.js"
+
 const DIRS = { east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0], south: [0, 0, 1], north: [0, 0, -1] }
 const DIR_NAMES = Object.keys(DIRS)
 const AIR = /(^|:)(air|cave_air|void_air|structure_void)$/
 
 export async function optimise(structure, templates, position, { lib, getCullFaces, setStatus, setProgress, shouldCancel }) {
   setStatus?.("optimising…")
-  setProgress?.(0, structure.blocks.length)
-  await new Promise(r => setTimeout(r))
+  // one monotonic 0..10000 sweep across both passes (culling, then the
+  // library's optimizeScene), so the bar never animates backwards between them
+  setProgress?.(0, 10000)
+  await yieldTask()
 
   // explicit air blocks (vanilla nbts fill their bounds with them) count as
   // absent everywhere: never placed, and a neighbour of air memoises the
@@ -22,8 +26,19 @@ export async function optimise(structure, templates, position, { lib, getCullFac
   }
   const cullMemo = new Map()
   const placements = []
+  let nonAirTotal = 0
+  for (const b of structure.blocks) if (!isAir[b.state]) nonAirTotal++
+  let seen = 0
   for (const b of structure.blocks) {
     if (isAir[b.state]) continue
+    // cached cull lookups resolve as microtasks, so this loop needs real
+    // yields (and cancel checks) to keep the page alive on huge scenes
+    if (++seen % 2000 === 0) {
+      setStatus?.(`optimising… culling ${seen}/${nonAirTotal}`)
+      setProgress?.(Math.round(seen / nonAirTotal * 1000), 10000)
+      await yieldTask()
+      if (shouldCancel?.()) return null
+    }
     const entry = structure.palette[b.state]
     const tmpl = templates.get(b.state)
     if (!entry?.Name || !tmpl) continue
@@ -46,9 +61,11 @@ export async function optimise(structure, templates, position, { lib, getCullFac
   }
 
   const result = await lib.optimizeScene(placements, {
+    // the library reports weighted stage progress on a fixed 0..10000 scale
     onProgress: (done, total) => {
-      setStatus?.(`optimising… ${done}/${total}`)
-      setProgress?.(done, total)
+      const f = done / total
+      setStatus?.(`optimising… ${Math.round(f * 100)}%`)
+      setProgress?.(1000 + Math.round(f * 9000), 10000)
     },
     shouldCancel
   })

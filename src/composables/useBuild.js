@@ -6,6 +6,7 @@ import { useScene } from "./useScene.js"
 import { useSlicers } from "./useSlicers.js"
 import { useLock } from "./useLock.js"
 import { optimise } from "../optimise.js"
+import { yieldTask } from "../yield.js"
 import { exportScene } from "../export.js"
 import { makeSignTexts, plainText } from "../signs.js"
 import { JIGSAW, parseState } from "../transforms.js"
@@ -84,7 +85,17 @@ async function remapFluidStates(structure, lib, assets) {
   for (const b of structure.blocks) byPos.set(b.pos.join(","), b)
   const byKey = new Map()
   structure.palette.forEach((e, i) => { if (e?.__fluidKey) byKey.set(e.__fluidKey, i) })
+  // hot caches resolve every await as a microtask, which never yields the
+  // event loop: force real yields so water-heavy loads don't freeze the page
+  let seen = 0
   for (const b of structure.blocks) {
+    if (++seen % 2000 === 0) {
+      state.status = `water surfaces… ${seen}/${structure.blocks.length}`
+      // the water pass is the front of the build bar's unified 0..10000 sweep
+      state.progress = { phase: "build", done: Math.round(seen / structure.blocks.length * 1500), total: 10000 }
+      await yieldTask()
+      if (cancelBuild) return
+    }
     const e = structure.palette[b.state]
     if (!e?.Name) continue
     const type = lib.fluidTypeOf?.(e.Name, e.Properties) ?? null
@@ -987,13 +998,13 @@ async function build(structure = source, refit = true, slice = false) {
     // build every template up front (the optimiser reads them all)
     let placedCount = 0
     let sampleAt = null, tSample = 0
-    state.progress = { phase: "build", done: 0, total }
+    state.progress = { phase: "build", done: 1500, total: 10000 }
     for (let i = 0; i < total; i++) {
       if (await template(solid[i].state)) placedCount++
       if (i % 400 === 399) {
         state.status = `building… ${i + 1}/${total}`
-        state.progress = { phase: "build", done: i + 1, total }
-        await new Promise(r => setTimeout(r))
+        state.progress = { phase: "build", done: 1500 + Math.round((i + 1) / total * 8500), total: 10000 }
+        await yieldTask()
         if (cancelBuild) return abort()
         if (!warnedOnce && !perfCal) {
           // sample the marginal rate only after the cold start: template
@@ -1020,7 +1031,7 @@ async function build(structure = source, refit = true, slice = false) {
         }
       }
     }
-    state.progress = { phase: "build", done: total, total }
+    state.progress = { phase: "build", done: 10000, total: 10000 }
     if (cancelBuild) return abort()
 
     // centre, snapped so every block fills a whole grid cell: templates are
