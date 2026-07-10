@@ -4,20 +4,63 @@ import { mirrorState, mix, rnd, rotateState } from "../transforms.js"
 // room spawns corridors off its four walls; corridors recurse depth-first
 // through crossings and stairs up to depth 8 within an 80-block radius.
 // standalone stubs, since the shaft has no terrain around it: locations are
-// never invalid, everything counts as underground (isInterior true), supports
-// always find a ceiling, and the support pillars/chains that grow toward
-// terrain do nothing. the start room gets a fabricated dirt floor so the
-// entry piece is visible; stair pieces are pure carves like the game.
+// never invalid, everything counts as underground (isInterior true), and
+// supports usually find a ceiling. suspended pieces are the open-cave case:
+// in game a piece hangs wherever cave air sits above it (isSupportingBox /
+// placeSupportPillar fail), so full generation carves a fake 2d cave across
+// the footprint and runs those same per-column checks against it, giving
+// realistic contiguous stretches of hanging shaft. suspended corridors lose
+// their section supports and hang their ends from a virtual ceiling 8 blocks
+// above the structure's highest point; suspended crossings lose the corner
+// pillars nothing is standing over. the cave outline ships on the structure
+// so the viewer can draw it. the start room gets a fabricated dirt floor so
+// the entry piece is visible; stair pieces are pure carves like the game.
 
 const TYPES = {
   normal: { wood: "minecraft:oak_log", planks: "minecraft:oak_planks", fence: "minecraft:oak_fence" },
   mesa: { wood: "minecraft:dark_oak_log", planks: "minecraft:dark_oak_planks", fence: "minecraft:dark_oak_fence" }
 }
 
+// the fake cave: 1-2 tunnels wandering across the shaft's footprint, carved
+// as circles along the path like the game's carvers, but 2d (x/z only). its
+// own random stream so the layout and emission stay game-identical
+function carveCave(seed, bLo, bHi, attempt) {
+  const r = rnd(mix(mix(seed, 51966), attempt))
+  const cells = new Set()
+  const carve = (cx, cz, rad) => {
+    for (let x = Math.floor(cx - rad); x <= Math.ceil(cx + rad); x++) {
+      for (let z = Math.floor(cz - rad); z <= Math.ceil(cz + rad); z++) {
+        const dx = x + 0.5 - cx, dz = z + 0.5 - cz
+        if (dx * dx + dz * dz <= rad * rad) cells.add(x + "," + z)
+      }
+    }
+  }
+  const tunnels = 1 + Math.floor(r() * 2)
+  for (let t = 0; t < tunnels; t++) {
+    const sx = bLo[0] + (0.25 + r() * 0.5) * (bHi[0] - bLo[0])
+    const sz = bLo[1] + (0.25 + r() * 0.5) * (bHi[1] - bLo[1])
+    const heading = r() * Math.PI * 2
+    const base = 3 + r() * 3
+    for (const dir of [0, Math.PI]) {
+      let x = sx, z = sz, a = heading + dir
+      const len = 40 + Math.floor(r() * 60)
+      for (let i = 0; i < len; i++) {
+        a += (r() - 0.5) * 0.5
+        carve(x, z, Math.max(2, base + Math.sin(i / len * Math.PI) * 2 + (r() - 0.5)))
+        x += Math.cos(a) * 2
+        z += Math.sin(a) * 2
+        if (x < bLo[0] - 8 || x > bHi[0] + 8 || z < bLo[1] - 8 || z > bHi[1] + 8) break
+      }
+    }
+  }
+  return cells
+}
+
 // single: null generates the whole shaft system; "corridor",
-// "spider_corridor" or "room" generate one piece with its in-game rolls
-// (rails, spider webs and spawner spot, room size). corridors have three
-// fixed lengths in game, so each is its own tree entry via fixedSections.
+// "spider_corridor", "suspended_corridor" or "room" generate one piece with
+// its in-game rolls (rails, spider webs and spawner spot, room size).
+// corridors have three fixed lengths in game, so each is its own tree entry
+// via fixedSections.
 export function makeMineshaft(typeName, single = null, fixedSections = null) {
   const T = TYPES[typeName]
 
@@ -46,10 +89,11 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
       pieces.push(makeRoom())
     } else if (single) {
       const sections = fixedSections ?? ni(3) + 2
-      const hasRails = single === "corridor" && ni(3) === 0
+      const hasRails = single !== "spider_corridor" && ni(3) === 0
       pieces.push({
         kind: "corridor", dir: "south", genDepth: 0, sections, hasRails,
         spider: single === "spider_corridor",
+        suspended: single === "suspended_corridor",
         box: { minX: 0, minY: 0, minZ: 0, maxX: 2, maxY: 2, maxZ: sections * 5 - 1 }
       })
     } else {
@@ -217,6 +261,37 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
 
     if (room) addChildren(room)
 
+    // the open cave's ceiling: 8 blocks above the structure's highest point,
+    // so suspended supports have something to hang their chains from
+    const ceilY = Math.max(...pieces.map(p => p.box.maxY)) + 8
+
+    // the cave spans the full layout regardless of maxDepth, so it holds
+    // still while the level menu grows the shaft through it. the start room
+    // always spawns in rock: re-roll the cave until it misses the room, and
+    // failing that carve the room's footprint back out
+    let cave = null
+    if (!single) {
+      const bLo = [Infinity, Infinity], bHi = [-Infinity, -Infinity]
+      for (const p of pieces) {
+        bLo[0] = Math.min(bLo[0], p.box.minX); bHi[0] = Math.max(bHi[0], p.box.maxX)
+        bLo[1] = Math.min(bLo[1], p.box.minZ); bHi[1] = Math.max(bHi[1], p.box.maxZ)
+      }
+      const rb = room.box
+      for (let attempt = 0; attempt < 40; attempt++) {
+        cave = carveCave(baseSeed, bLo, bHi, attempt)
+        let clear = true
+        for (let x = rb.minX - 2; x <= rb.maxX + 2 && clear; x++) {
+          for (let z = rb.minZ - 2; z <= rb.maxZ + 2 && clear; z++) {
+            if (cave.has(x + "," + z)) clear = false
+          }
+        }
+        if (clear) break
+      }
+      for (let x = rb.minX - 2; x <= rb.maxX + 2; x++) {
+        for (let z = rb.minZ - 2; z <= rb.maxZ + 2; z++) cave.delete(x + "," + z)
+      }
+    }
+
     // ---- block emission into one world-space cell map, piece order
 
     const naturalMax = Math.max(...pieces.map(p => p.genDepth))
@@ -302,7 +377,11 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
           carve(b.minX + 1, b.minY, b.minZ, b.maxX - 1, b.maxY, b.maxZ)
           carve(b.minX, b.minY, b.minZ + 1, b.maxX, b.maxY, b.maxZ - 1)
         }
+        // placeSupportPillar only builds a corner pillar when the block above
+        // the crossing isn't air: buried that's terrain, in the cave it's
+        // only whatever another piece put there
         for (const [px, pz] of [[b.minX + 1, b.minZ + 1], [b.minX + 1, b.maxZ - 1], [b.maxX - 1, b.minZ + 1], [b.maxX - 1, b.maxZ - 1]]) {
+          if (cave?.has(px + "," + pz) && !solidAt(px, b.maxY + 1, pz)) continue
           for (let y = b.minY; y <= b.maxY; y++) place(px, y, pz, T.planks)
         }
         for (let x = b.minX; x <= b.maxX; x++) for (let z = b.minZ; z <= b.maxZ; z++) {
@@ -314,6 +393,11 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
       // ---- corridor
       const len = p.sections * 5 - 1
       const w = (x, y, z, s, props, nbt) => placeOriented(p, x, y, z, s, props, nbt)
+      const inCave = (x, z) => {
+        if (p.suspended != null) return p.suspended
+        const [wx, , wz] = orient(p, x, 0, z)
+        return cave?.has(wx + "," + wz) ?? false
+      }
       for (let y = 0; y <= 1; y++) for (let x = 0; x <= 2; x++) for (let z = 0; z <= len; z++) w(x, y, z, "minecraft:cave_air")
       for (let x = 0; x <= 2; x++) for (let z = 0; z <= len; z++) { if (r() <= 0.8) w(x, 2, z, "minecraft:cave_air") }
       if (p.spider) {
@@ -322,18 +406,22 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
       let placedSpider = false
       for (let s = 0; s < p.sections; s++) {
         const z = 2 + s * 5
-        // placeSupport: the ceiling always counts as supporting here
-        for (let y = 0; y <= 1; y++) {
-          w(0, y, z, T.fence, { west: "true" })
-          w(2, y, z, T.fence, { east: "true" })
-        }
-        if (rni(4) === 0) {
-          w(0, 2, z, T.planks)
-          w(2, 2, z, T.planks)
-        } else {
-          for (let x = 0; x <= 2; x++) w(x, 2, z, T.planks)
-          if (r() < 0.05) w(1, 2, z - 1, "minecraft:wall_torch", { facing: "south" })
-          if (r() < 0.05) w(1, 2, z + 1, "minecraft:wall_torch", { facing: "north" })
+        // placeSupport: buried sections always find a ceiling; over the cave
+        // the game's isSupportingBox check fails (any air above the span)
+        // and the support never generates
+        if (![0, 1, 2].some(x => inCave(x, z))) {
+          for (let y = 0; y <= 1; y++) {
+            w(0, y, z, T.fence, { west: "true" })
+            w(2, y, z, T.fence, { east: "true" })
+          }
+          if (rni(4) === 0) {
+            w(0, 2, z, T.planks)
+            w(2, 2, z, T.planks)
+          } else {
+            for (let x = 0; x <= 2; x++) w(x, 2, z, T.planks)
+            if (r() < 0.05) w(1, 2, z - 1, "minecraft:wall_torch", { facing: "south" })
+            if (r() < 0.05) w(1, 2, z + 1, "minecraft:wall_torch", { facing: "north" })
+          }
         }
         const web = (x, y, wz, prob) => { if (r() < prob && sturdyNeighbours(p, x, y, wz)) w(x, y, wz, "minecraft:cobweb") }
         web(0, 2, z - 1, 0.1); web(2, 2, z - 1, 0.1); web(0, 2, z + 1, 0.1); web(2, 2, z + 1, 0.1)
@@ -356,6 +444,40 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
           if (solidAt(fx, fy, fz) && r() < 0.7) w(1, 0, z, "minecraft:rail", { shape: railShape(p, "north_south") })
         }
       }
+      // placeDoubleLowerOrUpperSupport: prop the corridor ends up from below
+      // or hang them from the cave ceiling (fillPillarDownOrChainUp). on
+      // supported corridors the section fence post stops the upward scan, so
+      // this only shows on suspended pieces or above stacked solid blocks
+      const pillarOrChain = (wx, wy, wz) => {
+        const blockedAt = y => y >= ceilY || solidAt(wx, y, wz)
+        let down = true, up = true
+        for (let j = 1; down || up; j++) {
+          if (down) {
+            if (blockedAt(wy - j)) {
+              for (let y = wy - j + 1; y < wy; y++) place(wx, y, wz, T.wood)
+              return
+            }
+            down = j <= 20
+          }
+          if (up) {
+            if (blockedAt(wy + j)) {
+              place(wx, wy + 1, wz, T.fence)
+              for (let y = wy + 2; y < wy + j; y++) place(wx, y, wz, "minecraft:iron_chain", { axis: "y" })
+              return
+            }
+            up = j <= 50
+          }
+        }
+      }
+      const doubleSupport = z => {
+        for (const x of [0, 2]) {
+          const [wx, wy, wz] = orient(p, x, -1, z)
+          const floor = cells.get(key(wx, wy, wz))
+          if (floor && palette[floor.state].Name === T.planks) pillarOrChain(wx, wy, wz)
+        }
+      }
+      doubleSupport(2)
+      if (p.sections > 1) doubleSupport(len - 2)
     }
 
     function orient(p, x, y, z) {
@@ -418,11 +540,25 @@ export function makeMineshaft(typeName, single = null, fixedSections = null) {
     const outEntities = entities
       .filter(e => e.pos[0] >= lo[0] - 1 && e.pos[0] <= hi[0] + 1)
       .map(e => ({ ...e, pos: [e.pos[0] - lo[0], e.pos[1] - lo[1], e.pos[2] - lo[2]] }))
+    // the cave in structure-local block coords; the viewer clips it to the
+    // floor grid and draws its outline at floor and ceiling height
+    let caveWire = null
+    if (cave) {
+      caveWire = {
+        cells: [...cave].map(k => k.split(",").map(Number)).map(([x, z]) => [x - lo[0], z - lo[2]]),
+        y0: 0,
+        y1: ceilY - lo[1]
+      }
+    }
+
+    // anchor on the entry piece's corner so the camera tracks it
+    const eb = pieces[0].box
     return {
       structure: {
         size: [hi[0] - lo[0] + 1, hi[1] - lo[1] + 1, hi[2] - lo[2] + 1],
         palette, blocks, entities: outEntities,
-        anchor: [-lo[0], -lo[1], -lo[2]]
+        anchor: [eb.minX - lo[0], eb.minY - lo[1], eb.minZ - lo[2]],
+        ...caveWire && { cave: caveWire }
       },
       maxDepth: naturalMax
     }
@@ -440,5 +576,6 @@ for (const type of ["normal", "mesa"]) {
   for (const sections of [2, 3, 4]) {
     mineshaftPieceGens[`mineshaft_${type}_corridor_${sections * 5}`] = makeMineshaft(type, "corridor", sections)
     mineshaftPieceGens[`mineshaft_${type}_spider_corridor_${sections * 5}`] = makeMineshaft(type, "spider_corridor", sections)
+    mineshaftPieceGens[`mineshaft_${type}_suspended_corridor_${sections * 5}`] = makeMineshaft(type, "suspended_corridor", sections)
   }
 }

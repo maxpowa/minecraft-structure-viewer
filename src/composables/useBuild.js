@@ -926,6 +926,36 @@ async function build(structure = source, refit = true) {
     // border (4 on one side when needed to keep the size even, so the centre
     // cross lands on a block boundary)
     const parts = structure.__parts ?? [{ off: [0, 0, 0], size: structure.size }]
+    // a structure carrying a cave (mineshafts) gets a wireframe of the cave
+    // volume, and the floor grid hides where it falls into the cave. the
+    // cells are clipped to the grid footprint first so the outline closes
+    // along the grid edge
+    let caveWire = null
+    if (structure.cave) {
+      const c = structure.cave
+      const p0 = parts[0]
+      const gw = p0.size[0] + 6 + (p0.size[0] % 2), gd = p0.size[2] + 6 + (p0.size[2] % 2)
+      const xMin = p0.off[0] - 3, zMin = p0.off[2] - 3
+      const cells = new Set()
+      for (const [x, z] of c.cells) {
+        if (x >= xMin && x < xMin + gw && z >= zMin && z < zMin + gd) cells.add(x + "," + z)
+      }
+      const segs = []
+      for (const k of cells) {
+        const [x, z] = k.split(",").map(Number)
+        if (!cells.has((x - 1) + "," + z)) segs.push([x, z, x, z + 1])
+        if (!cells.has((x + 1) + "," + z)) segs.push([x + 1, z, x + 1, z + 1])
+        if (!cells.has(x + "," + (z - 1))) segs.push([x, z, x + 1, z])
+        if (!cells.has(x + "," + (z + 1))) segs.push([x, z + 1, x + 1, z + 1])
+      }
+      const tx = v => position.x + v * 16 - 8, tz = v => position.z + v * 16 - 8
+      caveWire = {
+        segments: segs.map(([x0, z0, x1, z1]) => [tx(x0), tz(z0), tx(x1), tz(z1)]),
+        y0: position.y + c.y0 * 16 - 8.01,
+        y1: position.y + c.y1 * 16 - 8,
+        has: (wx, wz) => cells.has(Math.floor((wx - position.x + 8) / 16) + "," + Math.floor((wz - position.z + 8) / 16))
+      }
+    }
     sceneApi.setGrids(parts.map(p => {
       const gw = p.size[0] + 6 + (p.size[0] % 2), gd = p.size[2] + 6 + (p.size[2] % 2)
       return {
@@ -936,7 +966,7 @@ async function build(structure = source, refit = true) {
         d: gd,
         label: p.name
       }
-    }))
+    }), caveWire)
     if (refit) sceneApi.fit()
     state.info = {
       size: `${sx}×${sy}×${sz}`,

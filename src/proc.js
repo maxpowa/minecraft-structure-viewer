@@ -39,5 +39,6 @@ for (const type of ["normal", "mesa"]) {
     const at = name => `minecraft/builtin/mineshaft/${type}/${name}_${len}`
     PROC.push({ prefix: at("corridor"), entry: at("corridor"), label: "Mineshaft Corridor", gen: `mineshaft_${type}_corridor_${len}`, steps: false, reroll: true })
     PROC.push({ prefix: at("spider_corridor"), entry: at("spider_corridor"), label: "Spider Corridor", gen: `mineshaft_${type}_spider_corridor_${len}`, steps: false, reroll: true })
+    PROC.push({ prefix: at("suspended_corridor"), entry: at("suspended_corridor"), label: "Suspended Corridor", gen: `mineshaft_${type}_suspended_corridor_${len}`, steps: false, reroll: true })
   }
 }

@@ -18,6 +18,7 @@ for (const type of ["normal", "mesa"]) {
   for (const len of [10, 15, 20]) {
     GENERATED[`minecraft/builtin/mineshaft/${type}/corridor_${len}`] = mineshaftPieceGens[`mineshaft_${type}_corridor_${len}`]
     GENERATED[`minecraft/builtin/mineshaft/${type}/spider_corridor_${len}`] = mineshaftPieceGens[`mineshaft_${type}_spider_corridor_${len}`]
+    GENERATED[`minecraft/builtin/mineshaft/${type}/suspended_corridor_${len}`] = mineshaftPieceGens[`mineshaft_${type}_suspended_corridor_${len}`]
   }
 }
 

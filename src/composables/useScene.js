@@ -40,22 +40,55 @@ let gridGroup = null
 const gridVisible = () => view.grid && view.wireframe !== "wire"
 const GRID_LINE = 0x333336
 
-function makeRectGrid({ x, z, w, d, y }) {
+// inCave clips the lines against the cave: any 16-unit span with a carved
+// cell on either side is left out (the cave outline draws that border)
+function makeRectGrid({ x, z, w, d, y }, inCave) {
   const P = [], C = []
   const cross = new THREE.Color(GRID_COLOR), line = new THREE.Color(GRID_LINE)
   const push = c => C.push(c.r, c.g, c.b, c.r, c.g, c.b)
+  const runs = (span, hidden) => {
+    if (!inCave) return [[0, span]]
+    const out = []
+    let start = null
+    for (let i = 0; i < span; i++) {
+      if (!hidden(i)) { if (start === null) start = i }
+      else if (start !== null) { out.push([start, i]); start = null }
+    }
+    if (start !== null) out.push([start, span])
+    return out
+  }
   for (let i = 0; i <= w; i++) {
-    P.push(x + i * 16, y, z, x + i * 16, y, z + d * 16)
-    push(i * 2 === w ? cross : line)
+    const lx = x + i * 16
+    for (const [a, b] of runs(d, j => inCave(lx - 8, z + j * 16 + 8) || inCave(lx + 8, z + j * 16 + 8))) {
+      P.push(lx, y, z + a * 16, lx, y, z + b * 16)
+      push(i * 2 === w ? cross : line)
+    }
   }
   for (let j = 0; j <= d; j++) {
-    P.push(x, y, z + j * 16, x + w * 16, y, z + j * 16)
-    push(j * 2 === d ? cross : line)
+    const lz = z + j * 16
+    for (const [a, b] of runs(w, i => inCave(x + i * 16 + 8, lz - 8) || inCave(x + i * 16 + 8, lz + 8))) {
+      P.push(x + a * 16, y, lz, x + b * 16, y, lz)
+      push(j * 2 === d ? cross : line)
+    }
   }
   const geo = new THREE.BufferGeometry()
   geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3))
   geo.setAttribute("color", new THREE.Float32BufferAttribute(C, 3))
   return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ vertexColors: true }))
+}
+
+// cave wireframe: the fake carver's outline drawn at floor and ceiling
+// height, so the suspended stretches of a mineshaft make sense
+const CAVE_LINE = 0x3d5464
+function makeCaveWire({ segments, y0, y1 }) {
+  const P = []
+  for (const [x0, z0, x1, z1] of segments) {
+    P.push(x0, y0, z0, x1, y0, z1)
+    P.push(x0, y1, z0, x1, y1, z1)
+  }
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(P, 3))
+  return new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: CAVE_LINE }))
 }
 
 // north indicator: a vector "N" just past the north (-z) edge, drawn as
@@ -190,8 +223,10 @@ function updateGridLabels() {
 // the nearest one when the camera is far away)
 let gridRects = []
 
-// rects: [{ x, z, y, w, d, label? }] with x/z/y in world units, w/d in blocks
-function setGrids(rects) {
+// rects: [{ x, z, y, w, d, label? }] with x/z/y in world units, w/d in
+// blocks. cave (world units) adds a cave wireframe and cuts its footprint
+// out of the rect grids
+function setGrids(rects, cave = null) {
   gridRects = rects.map(r => ({ x0: r.x, z0: r.z, x1: r.x + r.w * 16, z1: r.z + r.d * 16 }))
   if (gridGroup) {
     gridGroup.removeFromParent()
@@ -204,9 +239,10 @@ function setGrids(rects) {
   gridGroup = new THREE.Group()
   gridGroup.visible = gridVisible()
   for (const r of rects) {
-    gridGroup.add(makeRectGrid(r))
+    gridGroup.add(makeRectGrid(r, cave?.has))
     gridGroup.add(r.label ? makeNameTag(r) : makeNorth(r))
   }
+  if (cave) gridGroup.add(makeCaveWire(cave))
   scene.add(gridGroup)
   refreshSphere()
 }
