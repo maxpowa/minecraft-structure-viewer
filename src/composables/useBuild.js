@@ -259,6 +259,7 @@ let animator = null
 let templates = null
 let nonSolid = new Set()
 let atlasTextures = [] // the displayed atlases; swapped + disposed on rebuild
+let sceneLight = null // the displayed build's light volume; swapped + disposed like the atlases
 let entityMarkers = [] // billboarded entities: { e, x, y, z } in root-local coords
 let markerTextures = []
 let doorByCell = new Map()
@@ -486,7 +487,7 @@ async function attachEntities(structure, lib, assets) {
           g.userData.daytime = daytimeUniform
           for (const model of await lib.parseBlockstate(assets, blockId, { data, ignoreAtlases: true })) {
             const data = await lib.resolveModelData(assets, model)
-            await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
+            await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, light: sceneLight, animate: false })
           }
           if (g.children.length) template = g
         }
@@ -863,6 +864,7 @@ function disposeBundle(b) {
   disposeGroup(b.group)
   for (const t of b.atlasTextures) t.dispose()
   for (const t of b.markerTextures) t.dispose()
+  b.sceneLight?.dispose()
 }
 
 function discardFull() {
@@ -885,8 +887,8 @@ function showFull(on) {
 // slicers all off: the kept full build becomes the primary again, no rebuild
 function restoreFull() {
   if (!fullBundle || state.building) return false
-  const old = root, oldTex = atlasTextures, oldMarkerTex = markerTextures, oldAnimator = animator
-  ;({ group: root, atlasTextures, markerTextures, animator, entityMarkers, doorByCell } = fullBundle)
+  const old = root, oldTex = atlasTextures, oldMarkerTex = markerTextures, oldAnimator = animator, oldLight = sceneLight
+  ;({ group: root, atlasTextures, markerTextures, animator, entityMarkers, doorByCell, sceneLight } = fullBundle)
   current.value = fullBundle.structure
   state.info = fullBundle.info
   root.visible = true
@@ -900,6 +902,7 @@ function restoreFull() {
     disposeGroup(old)
     for (const t of oldTex) t.dispose()
     for (const t of oldMarkerTex) t.dispose()
+    oldLight?.dispose()
   }
   return true
 }
@@ -922,7 +925,9 @@ async function build(structure = source, refit = true, slice = false) {
   cancelBuild = false
   lock(true)
   const prevCurrent = current.value, prevSource = source, prevHasSB = state.hasStructureBlocks, prevInfo = state.info
+  let newLight = null
   function abort() {
+    newLight?.dispose()
     current.value = prevCurrent
     source = prevSource
     state.hasStructureBlocks = prevHasSB
@@ -948,6 +953,25 @@ async function build(structure = source, refit = true, slice = false) {
     const [sx, sy, sz] = structure.size
     state.status = "building…"
 
+    // per-block light: flood filled over the unsliced structure so cutaway
+    // views keep the real interior darkness (and sliced-away torches still
+    // glow). oversized scenes skip it rather than allocating a huge volume
+    if (state.lighting === "world" && lib.computeSceneLight && (sx + 2) * (sy + 2) * (sz + 2) <= 48000000) {
+      const lightBlocks = []
+      for (const b of unsliced.blocks) {
+        const e = unsliced.palette[b.state]
+        if (!e?.Name || AIR.test(e.Name)) continue
+        const name = LEGACY_RENAMES[e.Name.replace("minecraft:", "")] ?? e.Name
+        lightBlocks.push({ id: name, properties: fixLegacyProps(name.replace("minecraft:", ""), e.Properties) ?? {}, pos: b.pos })
+      }
+      if (lightBlocks.length) {
+        state.status = "lighting…"
+        newLight = await lib.computeSceneLight(lightBlocks, { assets })
+        if (cancelBuild) return abort()
+        state.status = "building…"
+      }
+    }
+
     templates = new Map()
     nonSolid = new Set()
     collBoxCache = new Map()
@@ -971,7 +995,7 @@ async function build(structure = source, refit = true, slice = false) {
           let any = false, allPlanes = true
           for (const model of await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true })) {
             const data = await lib.resolveModelData(assets, model)
-            await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false, fluidHeights: entry.__fluidHeights, block, neighbors: block.neighbors })
+            await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, light: newLight, animate: false, fluidHeights: entry.__fluidHeights, block, neighbors: block.neighbors })
             for (const el of data?.elements ?? []) { any = true; if (!isPlane(el)) allPlanes = false }
           }
           if (any && allPlanes) nonSolid.add(stateIdx)
@@ -1052,6 +1076,7 @@ async function build(structure = source, refit = true, slice = false) {
     // block-centred, so a centre ≡ 8 (mod 16) keeps blocks on the lattice
     const gridCentre = v => Math.round((v - 8) / 16) * 16 + 8
     const position = new THREE.Vector3(gridCentre(-(sx - 1) * 8), gridCentre(-(sy - 1) * 8), gridCentre(-(sz - 1) * 8))
+    newLight?.setOffset(position)
 
     // openable blocks render live (both models pre-built): keep them out of
     // the optimised static mesh
@@ -1094,7 +1119,7 @@ async function build(structure = source, refit = true, slice = false) {
               const g = new THREE.Group()
               g.userData.daytime = daytimeUniform
               const data = await lib.resolveModelData(assets, { ...m, x: 0, y: 0, z: 0 })
-              await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, animate: false })
+              await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, light: newLight, animate: false })
               canonDoorTmpl.set(key, g.children.length ? g : null)
             }
             if (!canonDoorTmpl.get(key)) key = null
@@ -1144,9 +1169,10 @@ async function build(structure = source, refit = true, slice = false) {
 
     // atomic swap: show the new group first, then drop the old one + its atlases
     const old = root, oldTex = atlasTextures, oldMarkerTex = markerTextures,
-      oldAnimator = animator, oldMarkers = entityMarkers, oldDoors = doorByCell
+      oldAnimator = animator, oldMarkers = entityMarkers, oldDoors = doorByCell, oldLight = sceneLight
     root = next
     atlasTextures = pending
+    sceneLight = newLight
     markerTextures = []
     sceneApi.scene.add(root)
     sceneApi.contentRoots.add(root)
@@ -1223,12 +1249,13 @@ async function build(structure = source, refit = true, slice = false) {
       old.visible = false
       fullBundle = {
         group: old, atlasTextures: oldTex, markerTextures: oldMarkerTex, animator: oldAnimator,
-        structure: prevCurrent, info: prevInfo, entityMarkers: oldMarkers, doorByCell: oldDoors
+        structure: prevCurrent, info: prevInfo, entityMarkers: oldMarkers, doorByCell: oldDoors, sceneLight: oldLight
       }
     } else if (old) {
       disposeGroup(old)
       for (const t of oldTex) t.dispose()
       for (const t of oldMarkerTex) t.dispose()
+      oldLight?.dispose()
     }
     if (fullBundle) {
       fullBundle.group.visible = false

@@ -3,6 +3,23 @@
 // Each row is a case the mesher should handle. ?debug=fluid renders just the
 // water levels row for eyeballing surface heights against the game.
 // ?debug=aquarium is a glass tank of water for translucency testing.
+// ?debug=lighting1 (a lone stone block), ?debug=lighting2 (a 31x31 stone
+// platform), and ?debug=lighting3 (the platform's rim only) isolate the
+// scene-light math: the lone block must match a no-volume build exactly, the
+// platform's underside falls off from 14 at the rim to 0 mid-span, and the
+// hollow square must stay fully sky-lit everywhere with no underside pool.
+// ?debug=lighting4 puts a torch on the platform's centre block: invisible at
+// noon, a warm pool fading to darkness within the platform at night, with
+// the full falloff to light 0 visible before the edges.
+// ?debug=lighting5 is the everything scene, nine zones: emitter pool sizes
+// (torch 14 / soul 10 / redstone 7 / lantern 15 / glowstone 15), a sealed
+// room whose torch light only spills out the doorway, a thin shared wall
+// that must not leak, an elevated platform with a soft square shadow under
+// it (and none beside it, there is no directional sun), a water basin
+// attenuating sky light with a glowstone on its floor, a tunnel whose end
+// gradients meet in the middle, a torch corridor where light passes the
+// stair wall's open half but not the solid wall, wall torches on a pillar,
+// and a lava pond lighting its surroundings.
 export function makeDebug(kind) {
   const palette = [], pi = new Map()
   function st(Name, Properties = {}) {
@@ -121,6 +138,106 @@ export function makeDebug(kind) {
     for (let x = 24; x <= 28; x++) { put(x, 1, 2, "stone"); put(x, 1, 8, "stone") }
     put(28, 1, 3, "stone"); put(28, 1, 7, "stone")
     spread(rect(25, 3, 34, 7), rect(25, 3, 27, 7), [[28, 3], [28, 7]], (x, z, l) => water(x, 1, z, l))
+
+    return finish()
+  }
+
+  if (kind === "lighting1") {
+    put(0, 0, 0, "stone")
+    return finish()
+  }
+
+  if (kind === "lighting2") {
+    for (let x = 0; x <= 30; x++) for (let z = 0; z <= 30; z++) put(x, 0, z, "stone")
+    return finish()
+  }
+
+  if (kind === "lighting3") {
+    for (let x = 0; x <= 30; x++) for (let z = 0; z <= 30; z++) {
+      if (x === 0 || x === 30 || z === 0 || z === 30) put(x, 0, z, "stone")
+    }
+    return finish()
+  }
+
+  if (kind === "lighting4") {
+    for (let x = 0; x <= 30; x++) for (let z = 0; z <= 30; z++) put(x, 0, z, "stone")
+    put(15, 1, 15, "torch")
+    return finish()
+  }
+
+  if (kind === "lighting5") {
+    const floor = (x0, z0, x1, z1, y = 0, name = "stone") => { for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) put(x, y, z, name) }
+    const ring = (x0, z0, x1, z1, y0, y1, name = "stone") => {
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+        if (x === x0 || x === x1 || z === z0 || z === z1) put(x, y, z, name)
+      }
+    }
+
+    // 1: emitter pool sizes side by side
+    floor(0, 0, 72, 14)
+    put(4, 1, 7, "torch")
+    put(20, 1, 7, "soul_torch")
+    put(36, 1, 7, "redstone_torch", { lit: "true" })
+    put(52, 1, 7, "lantern", { hanging: "false" })
+    put(68, 1, 7, "glowstone")
+
+    // 2: sealed room, torch inside, one doorway to spill through
+    floor(0, 22, 12, 38)
+    for (let y = 1; y <= 3; y++) for (let x = 2; x <= 10; x++) for (let z = 26; z <= 34; z++) {
+      if (x !== 2 && x !== 10 && z !== 26 && z !== 34) continue
+      if (x === 6 && z === 26 && y <= 2) continue
+      put(x, y, z, "stone")
+    }
+    floor(2, 26, 10, 34, 4)
+    put(6, 1, 30, "torch")
+
+    // 3: two open-top chambers sharing a thin wall, torch on one side only
+    floor(20, 22, 36, 34)
+    ring(21, 23, 35, 33, 1, 2)
+    for (let y = 1; y <= 2; y++) for (let z = 24; z <= 32; z++) put(28, y, z, "stone")
+    put(24, 1, 28, "torch")
+
+    // 4: elevated platform on a pillar: soft square shadow under, none beside
+    floor(44, 22, 68, 40)
+    floor(50, 25, 62, 37, 6)
+    for (let y = 1; y <= 5; y++) put(56, y, 31, "stone")
+
+    // 5: water basin: sky attenuation by depth, glowstone on the floor
+    floor(76, 22, 92, 38)
+    ring(78, 24, 90, 36, 1, 3)
+    for (let y = 1; y <= 3; y++) for (let x = 79; x <= 89; x++) for (let z = 25; z <= 35; z++) {
+      if (x === 84 && z === 30 && y === 1) continue
+      put(x, y, z, "water", { level: "0" })
+    }
+    put(84, 1, 30, "glowstone")
+
+    // 6: tunnel through a solid mass: end gradients meet in the middle
+    floor(0, 46, 24, 60)
+    for (let y = 1; y <= 5; y++) for (let x = 3; x <= 21; x++) for (let z = 49; z <= 57; z++) {
+      if (y <= 3 && z >= 52 && z <= 54) continue
+      put(x, y, z, "stone")
+    }
+
+    // 7: torch corridor: a stair wall passes light through its open half, the
+    // solid wall opposite passes none
+    floor(32, 46, 52, 62)
+    for (let z = 49; z <= 59; z++) {
+      for (let y = 1; y <= 3; y++) put(38, y, z, "stone")
+      put(44, 1, z, "oak_stairs", { facing: "west", half: "bottom", shape: "straight" })
+      for (let y = 2; y <= 3; y++) put(44, y, z, "stone")
+    }
+    put(41, 1, 54, "torch")
+
+    // 8: wall torches on a tall pillar: light on vertical surfaces
+    floor(60, 46, 76, 62)
+    for (let y = 1; y <= 8; y++) floor(67, 53, 69, 55, y)
+    put(66, 3, 54, "wall_torch", { facing: "west" })
+    put(68, 3, 52, "wall_torch", { facing: "north" })
+
+    // 9: lava pond: emitting fluid
+    floor(84, 46, 98, 60)
+    ring(86, 48, 96, 58, 1, 1)
+    for (let x = 87; x <= 95; x++) for (let z = 49; z <= 57; z++) put(x, 1, z, "lava", { level: "0" })
 
     return finish()
   }
