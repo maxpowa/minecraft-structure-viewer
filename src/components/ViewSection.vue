@@ -36,8 +36,8 @@ const collapsed = ref(true)
       <label for="wireframe">Wireframe</label>
       <select id="wireframe" v-model="view.wireframe">
         <option value="off">Off</option>
-        <option value="wire">Wireframe</option>
         <option value="overlay">Overlay</option>
+        <option value="wire">Wireframe</option>
       </select>
     </div>
     <div class="checks">
