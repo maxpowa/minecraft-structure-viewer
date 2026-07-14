@@ -1,12 +1,11 @@
 import * as THREE from "three"
 
-// The library is loaded at runtime from jsDelivr, pinned to a commit for
-// now: commit urls are immutable so the CDN can never serve stale files
-// (the latest-v2 alias kept old copies cached). switches to version-pinned
-// urls once the library starts releasing. VITE_LIB_URL overrides (e.g. a
-// localhost dev server). The app owns the three instance and hands it over,
-// so there is only ever one copy of three.
-const LIB_URL = import.meta.env.VITE_LIB_URL ?? "https://cdn.jsdelivr.net/gh/ewanhowell5195/block-model-renderer@5998703/src/web.js"
+// The library is loaded at runtime from jsDelivr, pinned to the released
+// npm version: version urls are immutable so the CDN can never serve stale
+// files. VITE_LIB_URL overrides (e.g. a localhost dev server). The app owns
+// the three instance and hands it over, so there is only ever one copy of
+// three.
+const LIB_URL = import.meta.env.VITE_LIB_URL ?? "https://cdn.jsdelivr.net/npm/block-model-renderer@2.1.0/src/web.js"
 
 let promise = null
 
