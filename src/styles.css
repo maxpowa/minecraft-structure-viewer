@@ -21,7 +21,7 @@ html, body, #app {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, sans-serif;
+  font-family: Gabarito, system-ui, sans-serif;
   font-size: 14px;
 }
 
