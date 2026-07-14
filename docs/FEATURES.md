@@ -33,6 +33,8 @@ features.zip contents:
   (delisted-but-kept names, section 5; written only when non-empty, and
   today every selector was removable so only the hidden file ships)
 - `viewer/default_seeds.json` + `viewer/static_features.json` (section 4)
+- `viewer/feature_folders.json` (flat rel -> folder map for the tree,
+  from the hand-curated tools/features/folders.json; section 6)
 - `viewer/structure_dupes.json` (tools-side record, the viewer ignores it)
 
 The zip is the lowest-priority pack source (`usePacks`: featureBytes next to
@@ -165,12 +167,54 @@ must STAY in the zip as resolution targets while staying out of the tree.
   `viewer/hidden_features.json` / `viewer/redundant_selectors.json` for
   the tree filter. Singles never get default-seed or static entries.
 
-## 6. Viewer wiring
+## 6. Feature folders (folders.json)
+
+The tree's folders are hand-curated in tools/features/folders.json
+(`{ "<folder/path>": ["name", ...] }`, names without the namespace);
+extract.js flattens it to `viewer/feature_folders.json` and logs notes for
+stale entries, duplicates, and unfiled listed features. Categorising is a
+judgement call, not code: it weighs what a feature IS, what it does, and
+where it generates in game.
+
+To file new features, run the aid:
+```
+node tools/features/info.js [version]
+```
+It prints every listed feature with its current folder (or UNFILED), config
+type, generation steps, and the biomes that reach it (traversing placed
+refs and selector chains in the jar, so a tree buried behind three
+selectors still shows its real biomes). Type suggests the what (tree, ore,
+disk, spring_feature); steps and biomes suggest the where
+(underground_decoration + nether biomes -> ores/nether, lush_caves ->
+caves/lush).
+
+Conventions the current layout follows, keep them:
+- trees/ splits by SPECIES (the logs decide, not the leaves), with
+  trees/fallen for the fallen logs; azalea includes rooted_azalea_tree.
+- Variant forms (bonemeal, planted, leaf_litter, bees) sit NEXT TO their
+  base feature, never in variant folders.
+- Dimension folders (nether/, end/) collect what only generates there;
+  nether ores still live in ores/nether so all ores browse together.
+- caves/ groups by cave biome/theme: lush, dripstone, sculk, sulfur, with
+  cross-biome cave features (amethyst_geode, glow_lichen) at its root.
+- Thematic folders beat type folders when they read better: fluids
+  (springs + lava lake), ice, disks, piles, fossils, mushrooms; misc only
+  for genuine one-offs (forest_rock).
+- Datapack features are never filed: anything without a mapping lists at
+  the root, which is correct for them.
+
+## 7. Viewer wiring
 
 - `useFeatures.populate` indexes `packs.featureSources()` (user packs +
   bundled zips, never the vanilla jar) and reads the viewer jsons;
   `state.names` excludes delisted names but `featurePath`/`has()` keep
   them resolvable.
+- The list renders as a folder tree from `folderOf(rel)` (curated paths,
+  section 6); the rel stays the id for URLs, selection, and datapack
+  overrides, and unmapped (datapack) features list at the root. Both tabs
+  share TreeFolder, parameterised by a provided `treeApi` (selection
+  source, file click/menu, folder Load all); filtering switches to the
+  same flat list the structures tab uses.
 - The Features list is the same list system as the structures tree, not a
   parallel one: an "All Features" root row (context menu: Load all, honours
   the filter), and clicks go through the shared `clickLoad(catalog, rel,
@@ -201,7 +245,7 @@ must STAY in the zip as resolution targets while staying out of the tree.
   entries).
 - Both list sorts use `numeric` (Intl.Collator numeric) from transforms.js.
 
-## 7. New-version runbook
+## 8. New-version runbook
 
 1. `node tools/features/extract.js <version>`; act on "structure dupe ..."
    notes; Java compile errors mean mappings moved in FeatureExtract.java.
@@ -212,5 +256,8 @@ must STAY in the zip as resolution targets while staying out of the tree.
    consumption) shift the default seeds and the hidden list: re-run
    extract.js after them. It is cheap (256 samples per feature).
 4. Removed features: no action, all outputs regenerate.
+   New features: file each in folders.json per section 6 (info.js shows
+   type/steps/biomes; extract.js logs "has no folder" until done); prune
+   entries it reports as stale.
 5. Ewan checks visuals in the browser (a tree, a disk, a delisted selector
    URL); do not build screenshot harnesses.

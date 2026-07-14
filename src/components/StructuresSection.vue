@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue"
+import { computed, nextTick, provide, ref, watch } from "vue"
 import { useStructures } from "../composables/useStructures.js"
 import { useStructure } from "../composables/useStructure.js"
 import { useWorld } from "../composables/useWorld.js"
@@ -16,6 +16,13 @@ const { locked } = useLock()
 const fileInput = ref(null)
 const treeEl = ref(null)
 const collapsed = ref(false)
+
+provide("treeApi", {
+  selected: () => state.selected,
+  open: (rel, ev) => loadVanilla(rel, ev),
+  loadAll: rels => loadMany(rels),
+  fileMenu: null
+})
 
 const stopReveal = watch(() => state.selected.length, async n => {
   if (!n) return

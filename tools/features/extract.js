@@ -85,6 +85,22 @@ async function main() {
   files.set("viewer/default_seeds.json", Buffer.from(JSON.stringify(defaults, null, 2)))
   files.set("viewer/static_features.json", Buffer.from(JSON.stringify(statics.filter(rel => !singleSet.has(rel) && !removedSet.has(rel)), null, 2)))
 
+  // hand-curated folders (folders.json): validated here, shipped flat
+  const folderGroups = JSON.parse(fs.readFileSync(path.join(here, "folders.json")))
+  const folderOf = {}
+  for (const [folder, names] of Object.entries(folderGroups)) {
+    for (const name of names) {
+      const rel = "minecraft/" + name
+      if (!ctx.featureByRel.has(rel)) log(`note: folders.json entry "${name}" no longer exists, prune it`)
+      else if (folderOf[rel]) log(`note: folders.json lists "${name}" twice (${folderOf[rel]} and ${folder})`)
+      else folderOf[rel] = folder
+    }
+  }
+  for (const rel of ctx.featureByRel.keys()) {
+    if (!folderOf[rel] && !singleSet.has(rel) && !selectors.includes(rel)) log(`note: "${rel.replace("minecraft/", "")}" has no folder in folders.json, it lists at the root`)
+  }
+  files.set("viewer/feature_folders.json", Buffer.from(JSON.stringify(folderOf, null, 2)))
+
   const root = path.resolve(here, "../..")
   writeBundle(path.join(root, "bundled/features"), files)
   packBundle(path.join(root, "bundled/features"), path.join(root, "public/features.zip"))

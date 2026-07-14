@@ -1,7 +1,5 @@
 <script setup>
-import { computed, reactive, ref, watch } from "vue"
-import { useStructure } from "../composables/useStructure.js"
-import { useStructures } from "../composables/useStructures.js"
+import { computed, inject, reactive, ref, watch } from "vue"
 import { useContextMenu } from "../composables/useContextMenu.js"
 import { useLock } from "../composables/useLock.js"
 
@@ -12,8 +10,9 @@ const props = defineProps({
   collapseToken: { type: Number, default: 0 }
 })
 
-const { state } = useStructures()
-const { loadVanilla, loadMany } = useStructure()
+// the owning section provides the tab-specific behaviour: selection source,
+// file click/menu, and the folder Load all
+const api = inject("treeApi")
 const ctx = useContextMenu()
 const { locked } = useLock()
 
@@ -93,7 +92,7 @@ function collectFiles(node, out = []) {
 function onMenu(name, child, e) {
   const rels = collectFiles(child)
   ctx.open(e, [
-    { label: `Load all (${rels.length})`, icon: "stacks", disabled: locked.value || !rels.length, action: () => loadMany(rels) },
+    { label: `Load all (${rels.length})`, icon: "stacks", disabled: locked.value || !rels.length, action: () => api.loadAll(rels) },
     { label: "Expand all", icon: "unfold_more", action: () => expandAll(name) },
     { label: "Collapse all", icon: "unfold_less", action: () => collapseAll(name) }
   ])
@@ -102,7 +101,7 @@ function onMenu(name, child, e) {
 // reveal the page-load selection once; children mount with it already set, so
 // their immediate run cascades the whole path open
 let revealed = false
-watch(() => state.selected, sel => {
+watch(() => api.selected(), sel => {
   if (revealed || !sel.length) return
   revealed = true
   const hasSel = node => node.files.some(f => sel.includes(f)) || Array.from(node.dirs.values()).some(hasSel)
@@ -124,8 +123,9 @@ const leaf = rel => rel.split("/").at(-1)
     </div>
   </details>
   <div v-for="rel in node.files" :key="rel" class="tree-file"
-    :class="{ sel: state.selected.includes(rel) }"
-    @click="loadVanilla(rel, $event)">{{ leaf(rel) }}</div>
+    :class="{ sel: api.selected().includes(rel) }"
+    @click="api.open(rel, $event)"
+    @contextmenu="api.fileMenu && ($event.preventDefault(), api.fileMenu(rel, $event))">{{ leaf(rel) }}</div>
 </template>
 
 <style scoped>
