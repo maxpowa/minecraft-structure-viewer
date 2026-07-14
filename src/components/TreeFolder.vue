@@ -11,7 +11,7 @@ const props = defineProps({
 })
 
 // the owning section provides the tab-specific behaviour: selection source,
-// file click/menu, and the folder Load all
+// file click/menu, the folder Load all, and optional per-file badge class/title
 const api = inject("treeApi")
 const ctx = useContextMenu()
 const { locked } = useLock()
@@ -112,6 +112,10 @@ watch(() => api.selected(), sel => {
 }, { immediate: true })
 
 const leaf = rel => rel.split("/").at(-1)
+
+// selection is the shared class; a section may add patched/variants badges via api
+const fileClass = rel => api.fileClass ? api.fileClass(rel) : { sel: api.selected().includes(rel) }
+const fileTitle = rel => api.fileTitle ? api.fileTitle(rel) : rel
 </script>
 
 <template>
@@ -123,7 +127,7 @@ const leaf = rel => rel.split("/").at(-1)
     </div>
   </details>
   <div v-for="rel in node.files" :key="rel" class="tree-file"
-    :class="{ sel: api.selected().includes(rel) }"
+    :class="fileClass(rel)" :title="fileTitle(rel)"
     @click="api.open(rel, $event)"
     @contextmenu="api.fileMenu && ($event.preventDefault(), api.fileMenu(rel, $event))">{{ leaf(rel) }}</div>
 </template>
@@ -149,6 +153,8 @@ summary:hover { color: #fff; }
   white-space: nowrap;
 }
 
+.tree-file.variants { color: #c39bff; }
+.tree-file.patched { color: #e0b341; }
 .tree-file:hover { color: #fff; background: #ffffff12; }
 .tree-file.sel { color: #6fd487; background: #6fd4871f; }
 </style>

@@ -39,6 +39,38 @@ in for the CDN; it must send CORS headers). Override the URL with
 `VITE_LIB_URL`. The app owns `three` and hands it to the library via
 `configure({ three })`, so there is only ever one three instance.
 
+## Structorium mod API mode
+
+The viewer can read its structure list and structure data from a running
+[Structorium](https://github.com/maxpowa/structure-dev-tool) mod instance instead
+of scanning uploaded data-pack zips. The mod serves a read-only JSON API
+(`/api/structures`, `/api/structure/<ns>/<path>?version=…`) and can host this
+bundle itself. In this mode the sidebar's filter dropdown becomes a **version**
+selector (Patched vs Original).
+
+Render assets also come from the mod (`/api/assets.zip`): the mod (client-only)
+serves the complete client assets (vanilla + mods + resource packs), so no Mojang
+download is needed and modded blocks render. (The viewer still falls back to the
+Mojang jar if a bundle ever reports itself incomplete.)
+
+Enable it with either:
+
+- `?api=<url>` at runtime — e.g. `npm run dev` then open
+  `http://localhost:5173/?api=http://localhost:25599` (the mod's CORS is
+  permissive, so a cross-origin dev server works).
+- `VITE_API_BASE` at build time — an empty value means the same origin, which is
+  how the mod-vendored build ships. Build it with:
+
+  ```
+  npm run build -- --mode mod
+  ```
+
+  then copy `dist/` into the mod at `assets/structorium/web/` (or point the mod's
+  `web.viewerDir` config at it). See `.env.mod`.
+
+`?version=resolved|original|pack` (with `?pack=<id>`) selects which copy of a
+structure to fetch and is shareable.
+
 ## URL params
 
 - `?vanilla=<name>` load a vanilla structure, e.g.
@@ -46,3 +78,5 @@ in for the CDN; it must send CORS headers). Override the URL with
   comma-separated list restores a packed combination
 - `?channel=snapshot` use the snapshot jar
 - `?seed=<hex>&level=<n>` restore a jigsaw/procedural session
+- `?api=<url>` read structures from a Structorium mod (see above)
+- `?version=<kind>&pack=<id>` pick the structure version in API mode

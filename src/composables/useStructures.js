@@ -4,6 +4,7 @@ import { usePacks } from "./usePacks.js"
 import { PROC } from "../proc.js"
 import { GENERATED } from "../generators/builtin.js"
 import { numeric } from "../transforms.js"
+import { apiEnabled, fetchIndex } from "../api.js"
 
 // structures? also matches the legacy/mod plural folder
 const STRUCT_RE = /^data\/([^/]+)\/structures?\/(.+)\.nbt$/
@@ -20,6 +21,8 @@ const state = reactive({
 })
 
 let structPath = new Map()
+// name -> { patched, providers } (API mode only), for tree colour-coding
+let metaByName = new Map()
 let starterSet = null, standaloneSet = null, structDepth = null, structRadius = null
 let worldgenPromise = null
 
@@ -36,6 +39,21 @@ function setWorldStructures(names) {
 }
 
 async function populate() {
+  metaByName = new Map()
+  if (apiEnabled()) {
+    // Index comes from the mod: name is "<ns>/<path>". The zip-path value is unused
+    // for reads (useStructure fetches from the API) but marks membership; the meta is
+    // kept for the tree's patched / has-variants indicators.
+    structPath = new Map()
+    for (const e of await fetchIndex()) {
+      const name = `${e.namespace}/${e.path}`
+      structPath.set(name, e.id)
+      metaByName.set(name, { patched: !!e.patched, providers: e.providers ?? [] })
+    }
+    state.names = [...structPath.keys()].sort()
+    if (state.selected.length) state.selected = state.selected.filter(rel => structPath.has(rel))
+    return
+  }
   const lib = await loadLibrary()
   structPath = new Map()
   // lowest priority first so a higher pack's zip path wins the map slot
@@ -58,6 +76,9 @@ async function allZipKeys() {
 // starterSet: not listed as a piece by any non-start pool; standaloneSet:
 // starters that pull nothing else in (entity spawns don't count)
 function computeWorldgen() {
+  // The starters/standalone filters need worldgen JSON from the pack zips, which
+  // the API doesn't serve — leave them unresolved so the list falls back to "all".
+  if (apiEnabled()) return Promise.resolve()
   worldgenPromise ??= (async () => {
     const lib = await loadLibrary()
     const assets = packs.assets.value
@@ -153,7 +174,9 @@ const zipPathOf = name => structPath.get(name)
 const has = name => structPath.has(name) || name in GENERATED || worldNames.includes(name)
 const getStructDepth = name => structDepth?.get(name)
 const getStructRadius = name => structRadius?.get(name)
+// { patched, providers } for a structure (API mode), or undefined
+const structMeta = name => metaByName.get(name)
 
 export function useStructures() {
-  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, visibleNames, zipPathOf, has, getStructDepth, getStructRadius, setWorldStructures }
+  return { state: readonly(state), stateMut: state, refresh, computeWorldgen, filteredNames, visibleNames, zipPathOf, has, getStructDepth, getStructRadius, setWorldStructures, structMeta }
 }

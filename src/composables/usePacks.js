@@ -2,6 +2,7 @@ import { reactive, shallowRef, readonly } from "vue"
 import { loadLibrary } from "../lib.js"
 import { loadMojangJar } from "../mojang.js"
 import { useLock } from "./useLock.js"
+import { apiEnabled, fetchAssetsMeta, fetchAssetsZip } from "../api.js"
 
 // index 0 = highest priority (prepareAssets first-wins order); pack bytes
 // stay outside the reactive state so large buffers aren't proxied
@@ -9,6 +10,9 @@ const bytesById = new Map()
 let baseBytes = null
 let builtinBytes = null
 let featureBytes = null
+// Assets served by a Structorium mod (API mode): layered above the vanilla base.
+// When the bundle is "complete" (single-player), it IS the base and Mojang is skipped.
+let apiAssetsBytes = null
 let nextId = 1
 
 // the game's hardcoded structures (tools/builtin) and code-built features
@@ -56,7 +60,7 @@ function setChannelParam(ch) {
 // scene keeps its cached textures until the rebuild lands
 async function rebuildAssets(swap) {
   const lib = await loadLibrary()
-  let sources = state.packs.map(p => bytesById.get(p.id)).concat(baseBytes).filter(Boolean)
+  let sources = [...state.packs.map(p => bytesById.get(p.id)), apiAssetsBytes, baseBytes].filter(Boolean)
   if (sources.length) sources = sources.concat(builtinBytes ?? [], featureBytes ?? [])
   const prev = assets.value
   assets.value = sources.length ? await lib.prepareAssets(sources, { cache: true }) : null
@@ -68,10 +72,7 @@ async function rebuildAssets(swap) {
   }
 }
 
-async function loadBase(swap) {
-  state.busy = true
-  lock(true)
-  state.baseFailed = false
+async function loadMojangBase() {
   try {
     await loadBuiltin()
     const mb = n => (n / 1048576).toFixed(0)
@@ -88,6 +89,38 @@ async function loadBase(swap) {
     state.baseStatus = /^version not found/.test(err?.message) ? err.message : "vanilla download failed"
     state.baseFailed = true
   }
+}
+
+// API mode: pull the render assets from the mod. A "complete" bundle (single-
+// player) includes vanilla and becomes the base, so no Mojang download; a
+// modded-only bundle layers over the vanilla jar we still fetch from Mojang.
+async function loadApiAssets() {
+  try {
+    state.baseStatus = "loading assets from mod…"
+    const meta = await fetchAssetsMeta()
+    apiAssetsBytes = await fetchAssetsZip()
+    if (meta.complete) {
+      baseBytes = null
+      state.baseId = "mod"
+      state.baseStatus = ""
+      return
+    }
+  } catch (err) {
+    console.warn("couldn't load mod assets:", err)
+    apiAssetsBytes = null
+  }
+  // modded-only, or the mod assets failed: fall back to the vanilla jar as base
+  await loadMojangBase()
+}
+
+// pack ops hold the global lock too: nothing else may start a load while the
+// asset bundle is being replaced
+async function loadBase(swap) {
+  state.busy = true
+  lock(true)
+  state.baseFailed = false
+  if (apiEnabled()) await loadApiAssets()
+  else await loadMojangBase()
   try {
     await rebuildAssets(swap)
   } finally {
@@ -156,7 +189,10 @@ async function movePack(id, delta, swap) {
   }
 }
 
-const allSources = () => state.packs.map(p => bytesById.get(p.id)).concat(baseBytes, builtinBytes, featureBytes).filter(Boolean)
+// Every zip source currently contributing files, highest priority first.
+// Structure discovery scans the union of these (a pack's data/ may add
+// structures the base doesn't have).
+const allSources = () => state.packs.map(p => bytesById.get(p.id)).concat(apiAssetsBytes, baseBytes, builtinBytes, featureBytes).filter(Boolean)
 
 // the vanilla jar is excluded on purpose: minecraft features list only from
 // the bundle, so anything the tools removed stays gone on snapshot jars too

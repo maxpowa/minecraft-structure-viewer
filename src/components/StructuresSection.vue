@@ -5,12 +5,13 @@ import { useStructure } from "../composables/useStructure.js"
 import { useWorld } from "../composables/useWorld.js"
 import { useContextMenu } from "../composables/useContextMenu.js"
 import { useLock } from "../composables/useLock.js"
+import { apiEnabled, apiView, fetchVersions } from "../api.js"
 import TreeFolder from "./TreeFolder.vue"
 import ListTabs from "./ListTabs.vue"
 
 const structures = useStructures()
-const { state, stateMut, computeWorldgen, filteredNames } = structures
-const { loadVanilla, loadMany, loadFile } = useStructure()
+const { state, stateMut, computeWorldgen, filteredNames, structMeta } = structures
+const { loadVanilla, loadMany, loadFile, reloadVersion } = useStructure()
 const ctx = useContextMenu()
 const { locked } = useLock()
 const fileInput = ref(null)
@@ -21,7 +22,9 @@ provide("treeApi", {
   selected: () => state.selected,
   open: (rel, ev) => loadVanilla(rel, ev),
   loadAll: rels => loadMany(rels),
-  fileMenu: null
+  fileMenu: null,
+  fileClass,
+  fileTitle
 })
 
 const stopReveal = watch(() => state.selected.length, async n => {
@@ -38,6 +41,23 @@ const names = computed(() => {
 
 const soleNs = computed(() => new Set(names.value.map(n => n.slice(0, n.indexOf("/")))).size <= 1)
 const disp = rel => soleNs.value ? rel.slice(rel.indexOf("/") + 1) : rel
+
+// gold = has a Structorium patch; purple = provided by more than one pack
+function fileClass(rel) {
+  const m = structMeta(rel)
+  return {
+    sel: state.selected.includes(rel),
+    patched: !!m?.patched,
+    variants: (m?.providers?.length ?? 0) > 1
+  }
+}
+function fileTitle(rel) {
+  const m = structMeta(rel)
+  const tags = []
+  if (m?.patched) tags.push("patched")
+  if ((m?.providers?.length ?? 0) > 1) tags.push(`${m.providers.length} packs`)
+  return tags.length ? `${rel} — ${tags.join(", ")}` : rel
+}
 
 const FLAT_CAP = 500
 const flat = computed(() => {
@@ -88,6 +108,41 @@ async function onMode(e) {
   if (e.target.value !== "all") await computeWorldgen()
 }
 
+// API mode: the version dropdown lists every version the mod offers for the
+// selected structure (resolved/original + one per providing pack), fetched when
+// the selection changes.
+const apiVersions = ref([])
+const currentRel = computed(() => state.selected.length === 1 ? state.selected[0] : null)
+const currentVersionValue = computed(() =>
+  apiView.version === "pack" ? `pack:${apiView.pack}` : apiView.version)
+
+const versionValue = v => v.kind === "pack" ? `pack:${v.packId}` : v.kind
+
+watch(currentRel, async rel => {
+  if (!apiEnabled() || !rel) {
+    apiVersions.value = []
+    return
+  }
+  const slash = rel.indexOf("/")
+  try {
+    apiVersions.value = await fetchVersions(rel.slice(0, slash), rel.slice(slash + 1))
+  } catch {
+    apiVersions.value = []
+  }
+}, { immediate: true })
+
+function onVersion(e) {
+  const val = e.target.value
+  if (val.startsWith("pack:")) {
+    apiView.version = "pack"
+    apiView.pack = val.slice("pack:".length)
+  } else {
+    apiView.version = val
+    apiView.pack = null
+  }
+  reloadVersion()
+}
+
 function onFile(e) {
   const file = e.target.files[0]
   e.target.value = ""
@@ -106,11 +161,18 @@ function onFile(e) {
     </h2>
     <div class="controls">
       <input v-model="stateMut.filterText" placeholder="Filter…">
-      <select :value="state.filterMode" @change="onMode" :disabled="locked" title="all: every structure. standalone: neither pulled into another build nor loads any other structure blocks. starters: anything that starts a build (never placed as a piece of another).">
+      <select v-if="!apiEnabled()" :value="state.filterMode" @change="onMode" :disabled="locked" title="all: every structure. standalone: neither pulled into another build nor loads any other structure blocks. starters: anything that starts a build (never placed as a piece of another).">
         <option value="all">All</option>
         <option value="standalone">Standalone</option>
         <option value="starters">Starters</option>
       </select>
+      <select v-else-if="apiVersions.length" :value="currentVersionValue" @change="onVersion" :disabled="locked" title="Which version of this structure to view: the resolved (patched) form, the pristine original, or a specific providing pack.">
+        <option v-for="v in apiVersions" :key="versionValue(v)" :value="versionValue(v)">{{ v.label }}</option>
+      </select>
+    </div>
+    <div v-if="apiEnabled()" class="legend">
+      <span class="patched">patched</span>
+      <span class="variants">multiple packs</span>
     </div>
     <ListTabs />
     <div class="tree" :class="{ disabled: locked }" ref="treeEl">
@@ -120,7 +182,7 @@ function onFile(e) {
         <template v-if="flat">
           <div v-if="!flat.length" class="empty">No match</div>
           <div v-for="rel in flat.slice(0, FLAT_CAP)" :key="rel" class="tree-file"
-            :class="{ sel: state.selected.includes(rel) }"
+            :class="fileClass(rel)" :title="fileTitle(rel)"
             @click="loadVanilla(rel, $event)">{{ disp(rel) }}</div>
           <div v-if="flat.length > FLAT_CAP" class="empty">…and {{ flat.length - FLAT_CAP }} more</div>
         </template>
@@ -166,6 +228,16 @@ function onFile(e) {
   min-width: 0;
 }
 
+.legend {
+  display: flex;
+  gap: 12px;
+  margin: 4px 0 2px;
+  font-size: 11px;
+}
+
+.legend .patched { color: #e0b341; }
+.legend .variants { color: #c39bff; }
+
 .tree {
   flex: 1;
   min-height: 120px;
@@ -208,6 +280,8 @@ function onFile(e) {
   white-space: nowrap;
 }
 
+.tree-file.variants { color: #c39bff; }
+.tree-file.patched { color: #e0b341; }
 .tree-file:hover { color: #fff; background: #ffffff12; }
 .tree-file.sel { color: #6fd487; background: #6fd4871f; }
 

@@ -14,6 +14,7 @@ import { yieldTask } from "../yield.js"
 import { useFeatures } from "./useFeatures.js"
 import { generateFeature } from "../features/index.js"
 import { mix, rand32, rnd } from "../transforms.js"
+import { apiEnabled, apiView, fetchStructureBytes, setDefaultView } from "../api.js"
 
 const READERS = { nbt: readStructure, litematic: readLitematic, schem: readSchem, mcstructure: readMcstructure }
 const COMBINE_AIR = /(^|:)(air|cave_air|void_air|structure_void)$/
@@ -312,6 +313,12 @@ async function apply(refit = true) {
 async function readVanilla(rel) {
   const w = useWorld()
   if (w.hasStructure(rel)) return readStructure(await w.readStructureBytes(rel))
+  if (apiEnabled()) {
+    // rel is "<ns>/<path>"; the path segment may itself contain slashes.
+    const slash = rel.indexOf("/")
+    const ns = rel.slice(0, slash), path = rel.slice(slash + 1)
+    return readStructure(await fetchStructureBytes(ns, path, apiView.version, apiView.pack))
+  }
   const zp = structures.zipPathOf(rel)
   if (!zp) {
     const gen = GENERATED[rel]
@@ -324,7 +331,30 @@ async function readVanilla(rel) {
   return fixBuiltin(rel, s, 0)
 }
 
-// must match TreeFolder's render order (folders before files); shift ranges span it
+// re-read the loaded structure(s) at the current apiView version and rebuild in
+// place, keeping the selection (used by the version selector).
+async function reloadVersion() {
+  if (!apiEnabled() || !loaded.length) return
+  return withLock(async () => {
+    state.error = ""
+    const snap = snapshot()
+    try {
+      for (const e of loaded) {
+        if (!e.rel) continue
+        const s = await readVanilla(e.rel)
+        if (s) e.structure = s
+      }
+      if (await apply(false) === false) restore(snap)
+    } catch (err) {
+      state.error = `couldn't reload structure: ${err}`
+    }
+  })
+}
+
+// the sidebar's visual order: with a search active it is the flat result
+// list, otherwise the tree (folders before files at every level, same as
+// TreeFolder renders). loads always sort into this order, and shift ranges
+// span it, across folder boundaries
 function visualOrder() {
   const names = structures.visibleNames()
   if (structures.state.filterText.trim()) return new Map(names.map((n, i) => [n, i]))
@@ -358,6 +388,9 @@ function clickLoad(cat, rel, ev) {
   const shift = !!ev?.shiftKey && canCombine, ctrl = !!(ev?.ctrlKey || ev?.metaKey) && canCombine
   return withLock(async () => {
     state.error = ""
+    // a tree click is a fresh view — default to this structure's own version
+    // (patched if it has a patch, else the winning pack that's actually used)
+    if (apiEnabled()) setDefaultView(structures.structMeta(rel))
     const snap = snapshot()
     try {
       const order = cat.order()
@@ -614,5 +647,5 @@ async function onAssetsSwapped() {
 packs.setSwapHandler(onAssetsSwapped)
 
 export function useStructure() {
-  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug, loadFeature, loadFeatures, loadFeatureField, clickFeature, cancelReading }
+  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug, loadFeature, loadFeatures, loadFeatureField, clickFeature, cancelReading, reloadVersion }
 }
