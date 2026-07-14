@@ -10,8 +10,10 @@ import { useLock } from "./composables/useLock.js"
 import { useWalk } from "./composables/useWalk.js"
 import { useContainer } from "./composables/useContainer.js"
 import { useSlicers } from "./composables/useSlicers.js"
+import { tab } from "./composables/useTab.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
+import FeaturesSection from "./components/FeaturesSection.vue"
 import WorldSection from "./components/WorldSection.vue"
 import ViewSection from "./components/ViewSection.vue"
 import SlicersSection from "./components/SlicersSection.vue"
@@ -28,7 +30,7 @@ const libError = ref("")
 const canvasEl = ref(null)
 const { loadBase } = usePacks()
 const structures = useStructures()
-const { state: current, structure, loadVanilla, loadMany, loadDebug, cancelReading } = useStructure()
+const { state: current, structure, loadVanilla, loadMany, loadDebug, loadFeature, loadFeatures, loadFeatureField, cancelReading } = useStructure()
 const { state: buildState, cancel: cancelBuild } = useBuild()
 const sceneApi = useScene()
 const walk = useWalk()
@@ -69,11 +71,15 @@ onMounted(async () => {
   const params = new URLSearchParams(location.search)
   const vanilla = params.get("vanilla")
   const debug = params.get("debug")
+  const feature = params.get("feature")
   const stop = watch(() => structures.state.names.length, async n => {
     if (!n) return
     stop()
     const rels = (await decodeVanillaParam(vanilla)).filter(r => structures.has(r))
     if (debug != null) loadDebug(debug)
+    else if (feature != null && feature.includes(",")) loadFeatures(feature.split(","))
+    else if (feature != null && params.get("field") != null) loadFeatureField(feature, params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0)
+    else if (feature != null) loadFeature(feature, params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0)
     else if (rels.length > 1) loadMany(rels)
     else if (rels.length === 1) loadVanilla(rels[0])
     else if (structures.has(DEFAULT)) loadVanilla(DEFAULT)
@@ -92,7 +98,8 @@ onMounted(async () => {
       <div v-if="libError" class="lib-error">Renderer failed: {{ libError }}</div>
       <template v-else>
         <PacksSection />
-        <StructuresSection />
+        <StructuresSection v-show="tab === 'structures'" />
+        <FeaturesSection v-show="tab === 'features'" />
         <WorldSection />
         <ViewSection />
         <SlicersSection />

@@ -11,6 +11,9 @@ import { useWorld } from "./useWorld.js"
 import { fixBuiltin, GENERATED } from "../generators/builtin.js"
 import { makeDebug } from "../debug.js"
 import { yieldTask } from "../yield.js"
+import { useFeatures } from "./useFeatures.js"
+import { generateFeature } from "../features/index.js"
+import { mix, rand32, rnd } from "../transforms.js"
 
 const READERS = { nbt: readStructure, litematic: readLitematic, schem: readSchem, mcstructure: readMcstructure }
 const COMBINE_AIR = /(^|:)(air|cave_air|void_air|structure_void)$/
@@ -25,23 +28,30 @@ const session = useSession()
 const { locked, withLock } = useLock()
 
 const structure = buildApi.current
-const state = reactive({ name: "", error: "", reading: null })
+// field: { rel, base } while a variant field is on screen (drives the url,
+// the label, and what Re-roll means)
+const state = reactive({ name: "", error: "", reading: null, field: null })
 
-// [{ structure, name, rel? }]: rel present when it came from the vanilla tree
+// [{ structure, name, rel?, feature?, seed? }]: rel present when it came
+// from a sidebar tree; feature entries carry the seed they generated with
 let loaded = []
 
 // reading hundreds of nbts takes seconds: surface progress and let the
 // cancel button abort before anything is committed. returns null on cancel
 let cancelRead = false
 function cancelReading() { cancelRead = true }
-async function readMany(rels, reuse) {
+async function readMany(rels, reuse, mk) {
+  mk ??= async rel => {
+    const s = await readVanilla(rel)
+    return s ? { structure: s, name: rel, rel } : null
+  }
   cancelRead = false
   state.reading = { done: 0, total: rels.length }
   try {
     const entries = []
     for (const rel of rels) {
-      const s = reuse?.get(rel) ?? await readVanilla(rel)
-      if (s) entries.push({ structure: s, name: rel, rel })
+      const e = reuse?.get(rel) ?? await mk(rel)
+      if (e) entries.push(e)
       if (++state.reading.done % 25 === 0) {
         await yieldTask()
         if (cancelRead) return null
@@ -84,16 +94,19 @@ export async function decodeVanillaParam(param) {
 let seededHistory = false
 let navigatingHistory = false
 
-function setVanillaParam(rel) {
+function setVanillaParam(rel, featureRel, featureSeed, featureField) {
   if (navigatingHistory) return
   const u = new URL(location)
-  const before = u.searchParams.get("vanilla")
+  const before = u.searchParams.get("vanilla") + "|" + u.searchParams.get("feature")
   rel ? u.searchParams.set("vanilla", rel) : u.searchParams.delete("vanilla")
+  featureRel ? u.searchParams.set("feature", featureRel) : u.searchParams.delete("feature")
+  featureRel && featureSeed ? u.searchParams.set("fseed", String(featureSeed)) : u.searchParams.delete("fseed")
+  featureRel && featureField ? u.searchParams.set("field", "1") : u.searchParams.delete("field")
   // a load resets any level session; its params must not leak to the next one
   u.searchParams.delete("seed")
   u.searchParams.delete("level")
   u.searchParams.delete("debug")
-  const changed = (u.searchParams.get("vanilla") ?? null) !== (before ?? null)
+  const changed = u.searchParams.get("vanilla") + "|" + u.searchParams.get("feature") !== before
   if (changed && seededHistory) history.pushState(null, "", u)
   else history.replaceState(null, "", u)
   seededHistory = true
@@ -106,6 +119,14 @@ addEventListener("popstate", async () => {
     const debug = params.get("debug")
     if (debug != null) {
       await loadDebug(debug)
+      return
+    }
+    const feature = params.get("feature")
+    if (feature != null) {
+      const fseed = params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0
+      if (feature.includes(",")) await loadFeatures(feature.split(","))
+      else if (params.get("field") != null) await loadFeatureField(feature, fseed)
+      else await loadFeature(feature, fseed)
       return
     }
     const rels = (await decodeVanillaParam(params.get("vanilla"))).filter(r => structures.has(r))
@@ -190,6 +211,33 @@ async function packLoaded() {
     addRect(rect)
     parts.push({ s: c.s, name: c.name, off: [best[0] + 3, 0, best[1] + 3], size: c.s.size })
   }
+  return mergeParts(parts)
+}
+
+// a field's cells are all roughly the same size, so a plain row/column grid
+// reads better than pocket packing; every cell is the largest footprint and
+// each roll centres in its cell
+async function packField() {
+  const GAP = 3
+  const innerW = Math.max(...loaded.map(e => e.structure.size[0]))
+  const innerD = Math.max(...loaded.map(e => e.structure.size[2]))
+  const cellW = innerW + 6, cellD = innerD + 6
+  const cols = Math.ceil(Math.sqrt(loaded.length))
+  // no per-cell labels: a field is one feature repeated, the cells speak
+  // for themselves
+  const parts = loaded.map((e, i) => ({
+    s: e.structure,
+    off: [
+      (i % cols) * (cellW + GAP) + 3 + Math.floor((innerW - e.structure.size[0]) / 2),
+      0,
+      Math.floor(i / cols) * (cellD + GAP) + 3 + Math.floor((innerD - e.structure.size[2]) / 2)
+    ],
+    size: e.structure.size
+  }))
+  return mergeParts(parts)
+}
+
+async function mergeParts(parts) {
   const palette = [], byKey = new Map()
   function stateFor(e) {
     const k = e.Name + "|" + JSON.stringify(e.Properties ?? null)
@@ -236,33 +284,59 @@ async function packLoaded() {
 // a cancelled build leaves the previous scene up, so the list selection,
 // name and url roll back with it
 function snapshot() {
-  return { loaded, anchor, name: state.name, selected: Array.from(structures.state.selected), url: location.href }
+  return {
+    loaded, anchor, name: state.name, field: state.field, url: location.href,
+    selected: Array.from(structures.state.selected),
+    fselected: Array.from(useFeatures().state.selected)
+  }
 }
 function restore(snap) {
   loaded = snap.loaded
   anchor = snap.anchor
   state.name = snap.name
+  state.field = snap.field
   structures.stateMut.selected = snap.selected
+  useFeatures().stateMut.selected = snap.fselected
   history.replaceState(null, "", snap.url)
 }
 
 // rebuild whatever is loaded: one structure gets its session back, several
-// become a packed combination (no sessions, url lists them all).
+// become a packed combination (no sessions, url lists them all). features
+// and structures share the pipeline; entries are told apart by e.feature.
 // returns false when the build was cancelled
 async function apply(refit = true) {
   if (!loaded.length) return
-  if (loaded.length === 1) {
-    const { structure: s, name, rel } = loaded[0]
-    state.name = name
-    structures.stateMut.selected = rel ? [rel] : []
-    if (rel) setVanillaParam(rel)
+  const features = useFeatures()
+  structures.stateMut.selected = loaded.filter(e => e.rel && !e.feature).map(e => e.rel)
+  features.stateMut.selected = Array.from(new Set(loaded.filter(e => e.feature).map(e => e.rel)))
+  if (state.field) {
+    const { rel, base } = state.field
+    state.name = `${rel} (field of ${loaded.length})`
+    setVanillaParam(null, rel, base === features.defaultSeed(rel) ? 0 : base, true)
+    const s = loaded.length === 1 ? loaded[0].structure : await packField()
     if (await buildApi.build(s, refit) === false) return false
-    await session.startSession(s, name)
+    session.endSession()
+    return
+  }
+  if (loaded.length === 1) {
+    const { structure: s, name, rel, feature, seed } = loaded[0]
+    state.name = name
+    if (feature) {
+      setVanillaParam(null, rel, seed === features.defaultSeed(rel) ? 0 : seed)
+      if (await buildApi.build(s, refit) === false) return false
+      session.endSession()
+    } else {
+      if (rel) setVanillaParam(rel)
+      if (await buildApi.build(s, refit) === false) return false
+      await session.startSession(s, name)
+    }
   } else {
-    state.name = `${loaded.length} structures`
-    const rels = loaded.map(e => e.rel)
-    structures.stateMut.selected = rels.filter(Boolean)
-    setVanillaParam(rels.every(Boolean) ? await encodeRels(rels) : null)
+    const allFeatures = loaded.every(e => e.feature)
+    const allStructures = loaded.every(e => e.rel && !e.feature)
+    state.name = `${loaded.length} ${allFeatures ? "features" : allStructures ? "structures" : "items"}`
+    if (allFeatures) setVanillaParam(null, loaded.map(e => e.rel).join(","))
+    else if (allStructures) setVanillaParam(await encodeRels(loaded.map(e => e.rel)))
+    else setVanillaParam(null)
     if (await buildApi.build(await packLoaded(), refit) === false) return false
     session.endSession()
   }
@@ -317,24 +391,26 @@ function sortLoaded(order) {
 }
 
 // plain click loads one; ctrl-click toggles membership; shift-click loads the
-// whole tree range between the last plain/ctrl click and here
+// whole tree range between the last plain/ctrl click and here. one shared
+// implementation for both sidebars: a catalog says how a rel becomes an
+// entry and what the visual order is, so combinations can even mix tabs
 let anchor = null
-function loadVanilla(rel, ev) {
+function clickLoad(cat, rel, ev) {
   if (locked.value) return
-  // file/debug structures (no rel) never combine: an additive click on the
-  // tree just replaces them with the clicked structure
-  const canCombine = loaded.length > 0 && loaded.every(e => e.rel)
+  // file/debug structures (no rel) never combine, and neither does a field
+  // (its entries repeat one rel): an additive click just replaces them
+  const canCombine = loaded.length > 0 && loaded.every(e => e.rel) && !state.field
   const shift = !!ev?.shiftKey && canCombine, ctrl = !!(ev?.ctrlKey || ev?.metaKey) && canCombine
   return withLock(async () => {
     state.error = ""
     const snap = snapshot()
     try {
-      const order = visualOrder()
+      const order = cat.order()
       if (shift && anchor != null && anchor !== rel && order.has(anchor) && order.has(rel)) {
         const [lo, hi] = [order.get(anchor), order.get(rel)].sort((a, b) => a - b)
         const range = Array.from(order.entries()).filter(([, i]) => i >= lo && i <= hi).map(([r]) => r)
-        const reuse = new Map(loaded.filter(e => e.rel).map(e => [e.rel, e.structure]))
-        const entries = await readMany(range, reuse)
+        const reuse = new Map(loaded.filter(e => e.rel).map(e => [e.rel, e]))
+        const entries = await readMany(range, reuse, cat.entry)
         if (!entries?.length) return
         loaded = entries
       } else if (ctrl && loaded.length) {
@@ -343,23 +419,56 @@ function loadVanilla(rel, ev) {
           if (loaded.length === 1) return
           loaded.splice(at, 1)
         } else {
-          const s = await readVanilla(rel)
-          if (!s) return
-          loaded.push({ structure: s, name: rel, rel })
+          const e = await cat.entry(rel)
+          if (!e) return
+          loaded.push(e)
           sortLoaded(order)
         }
         anchor = rel
       } else {
-        const s = await readVanilla(rel)
-        if (!s) return
-        loaded = [{ structure: s, name: rel, rel }]
+        const e = await cat.entry(rel)
+        if (!e) return
+        loaded = [e]
         anchor = rel
       }
+      state.field = null
       if (await apply() === false) restore(snap)
     } catch (err) {
-      state.error = `couldn't load structure: ${err}`
+      state.error = `couldn't load: ${err?.message ?? err}`
     }
   })
+}
+
+const structCatalog = {
+  order: visualOrder,
+  entry: async rel => {
+    const s = await readVanilla(rel)
+    return s ? { structure: s, name: rel, rel } : null
+  }
+}
+
+const featureCatalog = {
+  order: () => new Map(useFeatures().visibleNames().map((n, i) => [n, i])),
+  entry: rel => featureEntry(rel)
+}
+
+function loadVanilla(rel, ev) { return clickLoad(structCatalog, rel, ev) }
+function clickFeature(rel, ev) { return clickLoad(featureCatalog, rel, ev) }
+
+async function featureEntry(rel, seed) {
+  const features = useFeatures()
+  const json = await features.readFeature(rel)
+  if (!json) return null
+  const useSeed = seed ?? features.defaultSeed(rel)
+  const loadStruct = async ref => {
+    const path = ref.includes(":") ? ref.replace(":", "/") : "minecraft/" + ref
+    const zp = structures.zipPathOf(path)
+    if (!zp) return null
+    const lib = await loadLibrary()
+    return readStructure(await lib.readFile(zp, packs.assets.value))
+  }
+  const s = await generateFeature(rel, json, rnd(useSeed), features.resolvePlaced, loadStruct)
+  return s.blocks.length ? { structure: s, name: rel, rel, feature: true, seed: useSeed } : null
 }
 
 // startup with an encoded ?vanilla list: load the whole set in one build
@@ -371,12 +480,111 @@ function loadMany(rels) {
     try {
       const entries = await readMany([...new Set(rels)])
       if (!entries?.length) return
+      state.field = null
       loaded = entries
       sortLoaded(visualOrder())
       anchor = loaded.at(-1)?.rel ?? null
       if (await apply() === false) restore(snap)
     } catch (err) {
       state.error = `couldn't load structures: ${err}`
+    }
+  })
+}
+
+// a worldgen feature by name: default loads are the bundled median-size
+// seed with a clean url; Re-roll passes a fresh seed that rides in ?fseed
+function loadFeature(rel, seed) {
+  if (locked.value) return
+  return withLock(async () => {
+    state.error = ""
+    const snap = snapshot()
+    try {
+      const e = await featureEntry(rel, seed)
+      if (!e) return
+      state.field = null
+      loaded = [e]
+      anchor = rel
+      if (await apply() === false) restore(snap)
+    } catch (err) {
+      state.error = `couldn't generate ${rel}: ${err?.message ?? err}`
+    }
+  })
+}
+
+// several features in one packed build (?feature=a,b,c or a multi Re-roll)
+function loadFeatures(rels, reroll = false) {
+  if (locked.value) return
+  return withLock(async () => {
+    state.error = ""
+    const snap = snapshot()
+    try {
+      const entries = await readMany(Array.from(new Set(rels)), undefined,
+        rel => featureEntry(rel, reroll ? rand32() : undefined))
+      if (!entries?.length) return
+      state.field = null
+      loaded = entries
+      anchor = loaded.at(-1)?.rel ?? null
+      if (await apply() === false) restore(snap)
+    } catch (err) {
+      state.error = `couldn't generate features: ${err?.message ?? err}`
+    }
+  })
+}
+
+// A field of one feature's variants: up to FIELD_N rolls derived
+// deterministically from the base seed (index 0 IS the base roll), deduped
+// by shape and packed small to large, each cell labelled with its seed.
+// The base defaults to the roll on screen so the field grows out of it.
+const FIELD_N = 256
+
+function shapeKey(s) {
+  const rows = s.blocks.map(b => {
+    const e = s.palette[b.state]
+    return `${b.pos[0] - s.anchor[0]},${b.pos[1]},${b.pos[2] - s.anchor[2]}|${e.Name}|${e.Properties ? JSON.stringify(e.Properties) : ""}`
+  })
+  return rows.sort().join("\n")
+}
+
+function loadFeatureField(rel, baseSeed) {
+  if (locked.value) return
+  const features = useFeatures()
+  return withLock(async () => {
+    state.error = ""
+    const snap = snapshot()
+    try {
+      const current = loaded.length === 1 && loaded[0].feature && loaded[0].rel === rel ? loaded[0].seed : undefined
+      const base = baseSeed ?? current ?? features.defaultSeed(rel)
+      cancelRead = false
+      state.reading = { done: 0, total: FIELD_N }
+      const entries = []
+      const seen = new Set()
+      try {
+        for (let i = 0; i < FIELD_N; i++) {
+          const seed = i === 0 ? base : mix(base, i) >>> 0
+          const e = await featureEntry(rel, seed)
+          if (e) {
+            const key = shapeKey(e.structure)
+            if (!seen.has(key)) {
+              seen.add(key)
+              entries.push(e)
+            }
+          }
+          if (++state.reading.done % 8 === 0) {
+            await yieldTask()
+            if (cancelRead) return
+          }
+        }
+      } finally {
+        state.reading = null
+      }
+      if (!entries.length) return
+      entries.sort((a, b) => a.structure.blocks.length - b.structure.blocks.length || a.seed - b.seed)
+      state.field = { rel, base }
+      loaded = entries
+      anchor = rel
+      if (await apply() === false) restore(snap)
+    } catch (err) {
+      state.error = `couldn't generate ${rel} field: ${err?.message ?? err}`
     }
   })
 }
@@ -394,6 +602,7 @@ function loadDebug(kind) {
     const u = new URL(location)
     u.searchParams.set("debug", kind || "1")
     history.replaceState(null, "", u)
+    state.field = null
     loaded = [{ structure: makeDebug(kind), name }]
     if (await apply() === false) restore(snap)
   })
@@ -408,6 +617,7 @@ function loadFile(file) {
       const reader = READERS[file.name.split(".").pop().toLowerCase()] ?? readStructure
       const s = await reader(await file.arrayBuffer())
       setVanillaParam(null)
+      state.field = null
       loaded = [{ structure: s, name: file.name.replace(/\.(nbt|litematic|schem|mcstructure)$/i, "") }]
       if (await apply() === false) restore(snap)
     } catch (err) {
@@ -424,6 +634,7 @@ function loadObject(structure, name) {
     const snap = snapshot()
     try {
       setVanillaParam(null)
+      state.field = null
       loaded = [{ structure, name }]
       if (await apply() === false) restore(snap)
     } catch (err) {
@@ -461,5 +672,5 @@ async function onAssetsSwapped() {
 packs.setSwapHandler(onAssetsSwapped)
 
 export function useStructure() {
-  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug, cancelReading }
+  return { state: readonly(state), structure, loadVanilla, loadMany, loadFile, loadObject, loadDebug, loadFeature, loadFeatures, loadFeatureField, clickFeature, cancelReading }
 }

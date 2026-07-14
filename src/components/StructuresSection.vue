@@ -6,6 +6,7 @@ import { useWorld } from "../composables/useWorld.js"
 import { useContextMenu } from "../composables/useContextMenu.js"
 import { useLock } from "../composables/useLock.js"
 import TreeFolder from "./TreeFolder.vue"
+import ListTabs from "./ListTabs.vue"
 
 const structures = useStructures()
 const { state, stateMut, computeWorldgen, filteredNames } = structures
@@ -110,6 +111,7 @@ function onFile(e) {
         <option value="starters">Starters</option>
       </select>
     </div>
+    <ListTabs />
     <div class="tree" :class="{ disabled: locked }" ref="treeEl">
       <div v-if="state.indexing" class="empty">Indexing…</div>
       <template v-else>
@@ -172,7 +174,7 @@ function onFile(e) {
   user-select: none;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 0 0 6px 6px;
   padding: 6px 8px;
 }
 

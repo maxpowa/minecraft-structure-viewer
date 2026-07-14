@@ -1,31 +1,90 @@
 <script setup>
-import { ref } from "vue"
+import { computed, ref } from "vue"
 import { useSession } from "../composables/useSession.js"
 import { useBuild } from "../composables/useBuild.js"
 import { useLock } from "../composables/useLock.js"
+import { useFeatures } from "../composables/useFeatures.js"
+import { useStructure } from "../composables/useStructure.js"
+import { useStructures } from "../composables/useStructures.js"
+import { rand32 } from "../transforms.js"
 
 const session = useSession()
 const s = session.state
 const { state: buildState } = useBuild()
 const { locked } = useLock()
+const features = useFeatures()
+const structures = useStructures()
+const { loadFeature, loadFeatures, loadFeatureField, state: structState } = useStructure()
 const open = ref(false)
+
+function rerollFeature() {
+  const sel = features.state.selected
+  if (sel.length > 1) loadFeatures(Array.from(sel), true)
+  else if (sel[0]) loadFeature(sel[0], rand32())
+}
+
+// first press builds the field around the current roll; while a field is
+// up the same button re-bases it on a fresh seed
+function fieldFeature() {
+  const rel = features.state.selected[0]
+  if (rel) loadFeatureField(rel, structState.field ? rand32() : undefined)
+}
+
+// back to one tree: the roll the field grew from
+function singleFeature() {
+  const f = structState.field
+  if (f) loadFeature(f.rel, f.base)
+}
+
+// one menu shell for everything: features and sessions share the
+// collapsible panel + head button, the show/hide toggle stands alone.
+// a static feature (one shape ever) gets no menu, like a static structure
+const mode = computed(() => {
+  if (s.active) return "session"
+  const sel = features.state.selected
+  if (sel.length && !structures.state.selected.length && !(sel.length === 1 && features.isStatic(sel[0]))) return "feature"
+  if (buildState.hasStructureBlocks) return "toggle"
+  return null
+})
+
+const headLabel = computed(() => mode.value === "feature"
+  ? structState.name.replace(/^minecraft\//, "")
+  // the base is just the raw structure: no level shown until you grow
+  : s.steps && s.level > 0 ? `${s.label} · Level ${s.level + 1}` : s.label)
 </script>
 
 <template>
-  <!-- without a session (plain pieces, combinations) only the show/hide
-       toggle remains, as a lone floating button -->
-  <div v-if="!s.active && buildState.hasStructureBlocks" class="level-menu" :class="{ locked }">
+  <!-- without a session or feature (plain pieces, combinations) only the
+       show/hide toggle remains, as a lone floating button -->
+  <div v-if="mode === 'toggle'" class="level-menu" :class="{ locked }">
     <button :disabled="locked" @click="buildState.hideStructureBlocks = !buildState.hideStructureBlocks">
       <span class="material-symbols-outlined">{{ buildState.hideStructureBlocks ? "visibility" : "visibility_off" }}</span>
       {{ buildState.hideStructureBlocks ? "Show Structure Blocks" : "Hide Structure Blocks" }}
     </button>
   </div>
-  <div v-else-if="s.active" class="level-menu" :class="{ locked }">
-    <!-- buttons that can't do anything at this level aren't rendered at all.
+  <div v-else-if="mode" class="level-menu" :class="{ locked }">
+    <!-- buttons that can't do anything right now aren't rendered at all.
          collapsed, the panel is hidden but keeps its width so the head button
          stretches to match -->
     <div class="panel" :class="{ collapsed: !open }">
-      <template v-if="s.steps">
+      <template v-if="mode === 'feature'">
+        <!-- a field packs up to 256 deterministic rolls of the loaded
+             feature, deduped; while one is up the button re-bases it and
+             the single Re-roll disappears -->
+        <button v-if="structState.field" :disabled="locked" @click="singleFeature">
+          <span class="material-symbols-outlined">crop_square</span>
+          Single
+        </button>
+        <button v-if="features.state.selected.length === 1" :disabled="locked" @click="fieldFeature">
+          <span class="material-symbols-outlined">{{ structState.field ? "shuffle" : "grid_view" }}</span>
+          {{ structState.field ? "Re-roll" : "Field" }}
+        </button>
+        <button v-if="!structState.field" :disabled="locked" @click="rerollFeature">
+          <span class="material-symbols-outlined">shuffle</span>
+          Re-roll
+        </button>
+      </template>
+      <template v-else-if="s.steps">
         <button v-if="s.level < s.maxDepth" :disabled="locked" @click="session.next()">
           <span class="material-symbols-outlined">skip_next</span>
           Load Next Level
@@ -56,15 +115,14 @@ const open = ref(false)
         <span class="material-symbols-outlined">{{ s.reroll || s.level > 0 ? "shuffle" : "construction" }}</span>
         {{ s.reroll ? "Re-roll" : s.level > 0 ? "Regenerate" : "Generate" }}
       </button>
-      <button v-if="buildState.hasStructureBlocks" :disabled="locked" @click="buildState.hideStructureBlocks = !buildState.hideStructureBlocks">
+      <button v-if="mode === 'session' && buildState.hasStructureBlocks" :disabled="locked" @click="buildState.hideStructureBlocks = !buildState.hideStructureBlocks">
         <span class="material-symbols-outlined">{{ buildState.hideStructureBlocks ? "visibility" : "visibility_off" }}</span>
         {{ buildState.hideStructureBlocks ? "Show" : "Hide" }}
       </button>
     </div>
     <button class="head" @click="open = !open">
       <span class="material-symbols-outlined">{{ open ? "expand_more" : "expand_less" }}</span>
-      <!-- the base is just the raw structure: no level shown until you grow -->
-      {{ s.steps && s.level > 0 ? `${s.label} · Level ${s.level + 1}` : s.label }}
+      {{ headLabel }}
     </button>
   </div>
 </template>

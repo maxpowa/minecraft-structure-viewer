@@ -10,17 +10,26 @@ import { useLock } from "./useLock.js"
 const bytesById = new Map()
 let baseBytes = null
 let builtinBytes = null
+let featureBytes = null
 let nextId = 1
 
-// The game's hardcoded structures, extracted to .nbt by tools/builtin and
-// bundled as a lowest-priority source (they only add data/.../structure/
-// builtin/ entries, so packs and the vanilla jar always win a conflict)
+// The game's hardcoded structures, extracted to .nbt by tools/builtin, and
+// its worldgen features, dumped to JSON by tools/features. Both bundle as
+// lowest-priority sources (they only add data/ entries vanilla doesn't ship,
+// so packs and the vanilla jar always win a conflict)
 async function loadBuiltin() {
-  if (builtinBytes) return
-  try {
-    const res = await fetch(import.meta.env.BASE_URL + "builtin.zip")
-    if (res.ok) builtinBytes = new Uint8Array(await res.arrayBuffer())
-  } catch {}
+  if (!builtinBytes) {
+    try {
+      const res = await fetch(import.meta.env.BASE_URL + "builtin.zip")
+      if (res.ok) builtinBytes = new Uint8Array(await res.arrayBuffer())
+    } catch {}
+  }
+  if (!featureBytes) {
+    try {
+      const res = await fetch(import.meta.env.BASE_URL + "features.zip")
+      if (res.ok) featureBytes = new Uint8Array(await res.arrayBuffer())
+    } catch {}
+  }
 }
 
 const state = reactive({
@@ -55,7 +64,7 @@ function setChannelParam(ch) {
 async function rebuildAssets(swap) {
   const lib = await loadLibrary()
   let sources = state.packs.map(p => bytesById.get(p.id)).concat(baseBytes).filter(Boolean)
-  if (sources.length) sources = sources.concat(builtinBytes ?? [])
+  if (sources.length) sources = sources.concat(builtinBytes ?? [], featureBytes ?? [])
   const prev = assets.value
   assets.value = sources.length ? await lib.prepareAssets(sources, { cache: true }) : null
   state.assetsVersion++
@@ -159,7 +168,7 @@ async function movePack(id, delta, swap) {
 // Every zip source currently contributing files, highest priority first.
 // Structure discovery scans the union of these (a pack's data/ may add
 // structures the base doesn't have).
-const allSources = () => state.packs.map(p => bytesById.get(p.id)).concat(baseBytes, builtinBytes).filter(Boolean)
+const allSources = () => state.packs.map(p => bytesById.get(p.id)).concat(baseBytes, builtinBytes, featureBytes).filter(Boolean)
 
 export function usePacks() {
   return { state: readonly(state), assets, loadBase, setChannel, addPacks, removePack, movePack, allSources, setSwapHandler }

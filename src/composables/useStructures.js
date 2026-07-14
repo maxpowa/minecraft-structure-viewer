@@ -3,6 +3,7 @@ import { loadLibrary } from "../lib.js"
 import { usePacks } from "./usePacks.js"
 import { PROC } from "../proc.js"
 import { GENERATED } from "../generators/builtin.js"
+import { numeric } from "../transforms.js"
 
 // Discovery: every data/<ns>/structure/*.nbt plus the legacy/mod plural
 // data/<ns>/structures/*.nbt, across the union of all pack sources. Names are
@@ -31,7 +32,7 @@ let worldgenPromise = null
 let worldNames = []
 
 function refreshNames() {
-  state.names = Array.from(structPath.keys()).concat(Object.keys(GENERATED), worldNames).sort()
+  state.names = Array.from(structPath.keys()).concat(Object.keys(GENERATED), worldNames).sort(numeric)
   if (state.selected.length) state.selected = state.selected.filter(rel => has(rel))
 }
 
@@ -119,7 +120,7 @@ function computeWorldgen() {
     }
     starterSet = new Set(state.names.filter(n => !childRef.has(n)))
     // a proc prefix matches on path boundaries, so an entry name that is a
-    // prefix of a sibling's (end/spike vs end/spike_caged) can't hide it
+    // string prefix of a sibling's can't hide it
     for (const p of PROC) {
       const pref = p.prefix.endsWith("/") ? p.prefix : p.prefix + "/"
       for (const n of state.names) if (n !== p.entry && (n === p.prefix || n.startsWith(pref))) starterSet.delete(n)
