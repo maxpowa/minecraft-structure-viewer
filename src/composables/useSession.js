@@ -11,6 +11,7 @@ import { AIR, EMPTY, JIGSAW, mix, parseState, poolTemplates, rand32 } from "../t
 import { runJigsaw } from "../jigsaw.js"
 import { mineshaftPieceGens, rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runEndSpikesActive, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
 import { PROC } from "../proc.js"
+import { apiEnabled, fetchStructureBytes, fetchDataJson } from "../api.js"
 
 // level is 0-based (the UI shows level + 1). the base is seedless; a seed rolls
 // on the first ascent off it and stays fixed until you return to the base
@@ -57,6 +58,12 @@ async function loadStruct(ref) {
   const [ns, path] = nsSplit(ref)
   const zp = structures.zipPathOf(ns + "/" + path)
   if (!zp) return null
+  // In API mode pieces come from the mod (resolved/patched, matching real worldgen);
+  // a missing piece 404s like an absent zip entry, so treat it as a leaf, not an error.
+  if (apiEnabled()) {
+    try { return readStructure(await fetchStructureBytes(ns, path)) }
+    catch { return null }
+  }
   const lib = await loadLibrary()
   const buf = await lib.readFile(zp, packs.assets.value)
   return buf ? readStructure(buf) : null
@@ -64,6 +71,7 @@ async function loadStruct(ref) {
 
 async function loadPool(ref) {
   const [ns, path] = nsSplit(ref)
+  if (apiEnabled()) return fetchDataJson(`${ns}/worldgen/template_pool/${path}.json`)
   const lib = await loadLibrary()
   const buf = await lib.readFile(`data/${ns}/worldgen/template_pool/${path}.json`, packs.assets.value)
   return buf ? JSON.parse(new TextDecoder().decode(buf)) : null

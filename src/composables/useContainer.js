@@ -8,6 +8,7 @@ import { useSlicers } from "./useSlicers.js"
 import { useStructures } from "./useStructures.js"
 import { readLootTable, readTrialSpawnerConfig, rollLoot, sampleTable, stackKey, prettyName, isInspectable } from "../loot.js"
 import { parseState } from "../transforms.js"
+import { apiEnabled, fetchDataJson } from "../api.js"
 
 const sceneApi = useScene()
 const buildApi = useBuild()
@@ -147,11 +148,17 @@ async function loadPoolEntries(poolId) {
   state.poolEntries = null
   state.poolFallback = ""
   try {
-    const lib = await loadLibrary()
     const [ns, path] = poolId.includes(":") ? poolId.split(":") : ["minecraft", poolId]
-    const buf = await lib.readFile(`data/${ns}/worldgen/template_pool/${path}.json`, packs.assets.value)
-    if (!buf) return
-    const json = JSON.parse(new TextDecoder().decode(buf))
+    let json
+    if (apiEnabled()) {
+      json = await fetchDataJson(`${ns}/worldgen/template_pool/${path}.json`)
+      if (!json) return
+    } else {
+      const lib = await loadLibrary()
+      const buf = await lib.readFile(`data/${ns}/worldgen/template_pool/${path}.json`, packs.assets.value)
+      if (!buf) return
+      json = JSON.parse(new TextDecoder().decode(buf))
+    }
     const out = []
     function collect(el, weight) {
       const type = stripNs(el?.element_type ?? "")

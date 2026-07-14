@@ -1,5 +1,6 @@
 import { loadLibrary } from "./lib.js"
 import { usePacks } from "./composables/usePacks.js"
+import { apiEnabled, fetchLootTable, fetchDataJson } from "./api.js"
 
 const packs = usePacks()
 
@@ -27,9 +28,11 @@ export function readLootTable(id) {
 }
 
 async function readLootTableRaw(id) {
+  const [ns, path] = id.includes(":") ? id.split(":") : ["minecraft", id]
+  // In API mode the mod serves loot tables (the asset bundle has no data/ files).
+  if (apiEnabled()) return fetchLootTable(ns, path)
   const lib = await loadLibrary()
   const assets = packs.assets.value
-  const [ns, path] = id.includes(":") ? id.split(":") : ["minecraft", id]
   for (const dir of ["loot_table", "loot_tables"]) {
     const buf = await lib.readFile(`data/${ns}/${dir}/${path}.json`, assets)
     if (buf) return JSON.parse(new TextDecoder().decode(buf))
@@ -41,9 +44,10 @@ async function readLootTableRaw(id) {
 export async function readTrialSpawnerConfig(ref) {
   if (!ref) return null
   if (typeof ref === "object") return ref
+  const [ns, path] = ref.includes(":") ? ref.split(":") : ["minecraft", ref]
+  if (apiEnabled()) return fetchDataJson(`${ns}/trial_spawner/${path}.json`).catch(() => null)
   const lib = await loadLibrary()
   const assets = packs.assets.value
-  const [ns, path] = ref.includes(":") ? ref.split(":") : ["minecraft", ref]
   try {
     const buf = await lib.readFile(`data/${ns}/trial_spawner/${path}.json`, assets)
     return buf ? JSON.parse(new TextDecoder().decode(buf)) : null
@@ -84,11 +88,18 @@ function applyFunctions(fns, stack) {
 
 async function applyEntry(entry, pool, out) {
   const type = strip(entry.type || "item")
-  if (type === "item") {
-    const stack = { id: entry.name, count: 1 }
+  if (type === "item" || type === "placebo:stack_entry") {
+    // placebo:stack_entry (Placebo lib, used by Apotheosis etc.) carries the item in
+    // `stack` and a count range in min/max, instead of vanilla's name + set_count function
+    const stack = { id: type === "item" ? entry.name : entry.stack?.id, count: 1 }
+    if (entry.stack?.components) stack.components = entry.stack.components
+    if (entry.min != null || entry.max != null) {
+      const lo = entry.min ?? 1, hi = entry.max ?? lo
+      stack.count = Math.max(1, lo + Math.floor(Math.random() * (hi - lo + 1)))
+    }
     applyFunctions(entry.functions, stack)
     applyFunctions(pool?.functions, stack)
-    out.push(stack)
+    if (stack.id) out.push(stack)
   } else if (type === "loot_table") {
     const t = typeof entry.value === "object" ? entry.value : await readLootTable(entry.value ?? entry.name)
     if (t) await rollInto(t, out)
@@ -193,12 +204,16 @@ export function describeTable(table) {
           else if (fn === "set_damage") notes.push("damaged")
           else if (fn === "set_stew_effect") notes.push("random effect")
         }
+        const stackCount = type === "placebo:stack_entry" && (e.min != null || e.max != null)
+          ? (e.min === e.max ? String(e.min ?? 1) : `${e.min ?? 1}-${e.max ?? "?"}`)
+          : null
         return {
           name: type === "item" ? strip(e.name)
+            : type === "placebo:stack_entry" ? strip(e.stack?.id ?? "item")
             : type === "loot_table" ? "table: " + (typeof e.value === "string" ? strip(e.value) : strip(e.name ?? "inline"))
-            : type,
+            : prettyName(type.includes(":") ? type.slice(type.indexOf(":") + 1) : type),
           pct: +((e.weight ?? 1) / total * 100).toFixed(1),
-          count: sc ? fmtNum(sc.count) : null,
+          count: sc ? fmtNum(sc.count) : stackCount,
           note: notes.join(", ")
         }
       })

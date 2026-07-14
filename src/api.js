@@ -71,6 +71,29 @@ export async function fetchStructureBytes(namespace, path, version = "resolved",
   return await res.arrayBuffer()
 }
 
+// A loot table as datapack JSON (the same shape a loot_table file has), so the
+// viewer can compute drop ratios in API mode where the asset bundle carries no
+// data/ loot tables. Returns null when the server has no such table (404).
+export async function fetchLootTable(namespace, path) {
+  const res = await fetch(`${API_BASE}/api/loot/${encodePath(namespace, path)}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`loot table: HTTP ${res.status}`)
+  return await res.json()
+}
+
+// A raw data/ file (JSON) served from the mod's datapack resource manager, so the
+// viewer can read template pools, trial-spawner configs, etc. in API mode, where the
+// served asset bundle carries no data/ files. `path` is the file path under data/
+// (e.g. "minecraft/worldgen/template_pool/foo.json"). Returns the parsed JSON, or
+// null when the server has no such file (404).
+export async function fetchDataJson(path) {
+  const enc = path.split("/").map(encodeURIComponent).join("/")
+  const res = await fetch(`${API_BASE}/api/data/${enc}`)
+  if (res.status === 404) return null
+  if (!res.ok) throw new Error(`data file: HTTP ${res.status}`)
+  return await res.json()
+}
+
 // Asset bundle the mod serves for rendering. `complete` is true when it includes
 // vanilla (client / single-player), so the viewer can skip the Mojang jar.
 export async function fetchAssetsMeta() {
