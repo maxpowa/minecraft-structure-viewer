@@ -113,3 +113,24 @@ aside section h2 .chev {
 }
 
 aside section.collapsed > :not(h2) { display: none !important; }
+
+/* every checkbox or slider row lives in a .checks group, even a lone one,
+   so toggle/slider spacing is identical across sections */
+aside section .checks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+aside section .checks:first-child { margin-top: 0; }
+aside section .checks:last-child { margin-bottom: 0; }
+
+aside section .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  color: var(--text);
+  user-select: none;
+}

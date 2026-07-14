@@ -23,16 +23,6 @@ const collapsed = ref(true)
         <option value="world">World</option>
         <option value="off">Off</option>
       </select>
-      <template v-if="buildState.lighting === 'world'">
-        <label for="daytime">Daytime</label>
-        <div class="daytime">
-          <input id="daytime" type="range" min="0" max="23999" v-model.number="buildState.daytime">
-          <span class="value">{{ buildState.daytime }}</span>
-          <button class="reset" title="Reset to noon" :disabled="buildState.daytime === NOON" @click="buildState.daytime = NOON">
-            <span class="material-symbols-outlined">restart_alt</span>
-          </button>
-        </div>
-      </template>
       <label for="wireframe">Wireframe</label>
       <select id="wireframe" v-model="view.wireframe">
         <option value="off">Off</option>
@@ -41,6 +31,16 @@ const collapsed = ref(true)
       </select>
     </div>
     <div class="checks">
+      <template v-if="buildState.lighting === 'world'">
+        <label class="check daytime">
+          Daytime
+          <input type="range" min="0" max="23999" v-model.number="buildState.daytime">
+          <span class="value">{{ buildState.daytime }}</span>
+          <button class="reset" title="Reset to noon" :disabled="buildState.daytime === NOON" @click.prevent="buildState.daytime = NOON">
+            <span class="material-symbols-outlined">restart_alt</span>
+          </button>
+        </label>
+      </template>
       <label class="check">
         <input type="checkbox" :checked="view.ortho" @change="sceneApi.setOrthoManual($event.target.checked)">
         Orthographic camera
@@ -65,25 +65,6 @@ const collapsed = ref(true)
   align-items: center;
 }
 
-.checks {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
-}
-
-.checks:first-child { margin-top: 0; }
-.checks:last-child { margin-bottom: 0; }
-
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: var(--text);
-  user-select: none;
-}
-
 button {
   display: flex;
   align-items: center;
@@ -93,14 +74,9 @@ button {
 
 button .material-symbols-outlined { font-size: 18px; }
 
-.daytime {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-}
+.daytime { min-width: 0; }
 
-.daytime input {
+.daytime input[type="range"] {
   flex: 1;
   min-width: 0;
 }

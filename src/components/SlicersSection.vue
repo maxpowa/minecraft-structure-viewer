@@ -15,16 +15,18 @@ const AXES = ["x", "y", "z"]
       <span class="material-symbols-outlined chev">{{ collapsed ? "chevron_right" : "expand_more" }}</span>
       Slicers
     </h2>
-    <div v-for="a in AXES" :key="a" class="slicer">
-      <label class="check">
-        <input type="checkbox" v-model="state[a].on" :disabled="locked">
-        {{ a.toUpperCase() }} axis
-      </label>
-      <span class="pos">{{ state[a].on ? state[a].i : "" }}</span>
-      <button class="icon" :disabled="!state[a].on || locked" title="Flip which side is sliced"
-        @click="state[a].flip = !state[a].flip">
-        <span class="material-symbols-outlined">{{ a === "y" ? "swap_vert" : "swap_horiz" }}</span>
-      </button>
+    <div class="checks">
+      <div v-for="a in AXES" :key="a" class="slicer">
+        <label class="check">
+          <input type="checkbox" v-model="state[a].on" :disabled="locked">
+          {{ a.toUpperCase() }} axis
+        </label>
+        <span class="pos">{{ state[a].on ? state[a].i : "" }}</span>
+        <button class="icon" :class="{ active: state[a].flip }" :disabled="!state[a].on || locked"
+          title="Flip which side is sliced" @click="state[a].flip = !state[a].flip">
+          <span class="material-symbols-outlined">{{ a === "y" ? "swap_vert" : "swap_horiz" }}</span>
+        </button>
+      </div>
     </div>
     <div class="hint">Drag a plane's corner handles to move it</div>
   </section>
@@ -37,15 +39,7 @@ const AXES = ["x", "y", "z"]
   gap: 8px;
 }
 
-.check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  color: var(--text);
-  user-select: none;
-  flex: 1;
-}
+.check { flex: 1; }
 
 .pos {
   min-width: 3ch;
@@ -69,6 +63,11 @@ button.icon {
 button.icon:hover:not(:disabled) {
   background: #ffffff14;
   color: var(--text);
+}
+
+button.icon.active {
+  color: #6fd487;
+  background: #6fd4871f;
 }
 
 button.icon .material-symbols-outlined { font-size: 18px; }

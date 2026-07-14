@@ -177,20 +177,22 @@ function onDblClick() {
         @pointerup="onUp" @pointercancel="onUp" @pointerleave="hoverTxt = ''"
         @wheel="onWheel" @dblclick="onDblClick" @contextmenu.prevent></canvas>
       <div class="hint">{{ hoverTxt || "Drag a box to select · wheel zooms · right-drag pans" }}</div>
-      <div class="yrange">
-        <span class="ylabel">Y {{ state.yMin }} – {{ state.yMax }}</span>
-        <div class="dual">
-          <div class="track"></div>
-          <div class="fill" :style="fillStyle"></div>
-          <input type="range" :min="Y_LO" :max="Y_HI" :value="state.yMin"
-            @input="world.setYRange(Math.min($event.target.valueAsNumber, state.yMax), state.yMax)">
-          <input type="range" :min="Y_LO" :max="Y_HI" :value="state.yMax"
-            @input="world.setYRange(state.yMin, Math.max($event.target.valueAsNumber, state.yMin))">
+      <div class="checks">
+        <div class="yrange">
+          <span class="ylabel">Y {{ state.yMin }} – {{ state.yMax }}</span>
+          <div class="dual">
+            <div class="track"></div>
+            <div class="fill" :style="fillStyle"></div>
+            <input type="range" :min="Y_LO" :max="Y_HI" :value="state.yMin"
+              @input="world.setYRange(Math.min($event.target.valueAsNumber, state.yMax), state.yMax)">
+            <input type="range" :min="Y_LO" :max="Y_HI" :value="state.yMax"
+              @input="world.setYRange(state.yMin, Math.max($event.target.valueAsNumber, state.yMin))">
+          </div>
+          <button class="reset" title="Reset to Y 60–100" :disabled="state.yMin === 60 && state.yMax === 100"
+            @click="world.setYRange(60, 100)">
+            <span class="material-symbols-outlined">restart_alt</span>
+          </button>
         </div>
-        <button class="reset" title="Reset to Y 60–100" :disabled="state.yMin === 60 && state.yMax === 100"
-          @click="world.setYRange(60, 100)">
-          <span class="material-symbols-outlined">restart_alt</span>
-        </button>
       </div>
       <div class="row">
         <button class="primary" :disabled="locked || state.busy || !state.selCount" @click="world.loadSelected()">
