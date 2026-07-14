@@ -4,7 +4,7 @@ const DIRS = { east: [1, 0, 0], west: [-1, 0, 0], up: [0, 1, 0], down: [0, -1, 0
 const DIR_NAMES = Object.keys(DIRS)
 const AIR = /(^|:)(air|cave_air|void_air|structure_void)$/
 
-export async function optimise(structure, templates, position, { lib, getCullFaces, setStatus, setProgress, shouldCancel }) {
+export async function optimise(structure, templates, position, { lib, getCullFaces, templateKey, setStatus, setProgress, shouldCancel }) {
   setStatus?.("optimising…")
   // one 0..10000 sweep across both passes so the bar never animates backwards
   setProgress?.(0, 10000)
@@ -31,7 +31,7 @@ export async function optimise(structure, templates, position, { lib, getCullFac
       if (shouldCancel?.()) return null
     }
     const entry = structure.palette[b.state]
-    const tmpl = templates.get(b.state)
+    const tmpl = templates.get(templateKey ? templateKey(b) : b.state)
     if (!entry?.Name || !tmpl) continue
     const nStates = DIR_NAMES.map(dir => {
       const [dx, dy, dz] = DIRS[dir]

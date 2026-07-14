@@ -630,7 +630,8 @@ function collisionBoxes(stateIdx) {
   let arr = collBoxCache.get(stateIdx)
   if (arr) return arr
   arr = []
-  const tmpl = templates.get(stateIdx)
+  let tmpl = templates.get(stateIdx)
+  for (let v = 1; !tmpl && v < 17; v++) tmpl = templates.get(stateIdx + ":" + v)
   if (tmpl && !nonSolid.has(stateIdx)) templateBoxes(tmpl, arr)
   collBoxCache.set(stateIdx, arr)
   return arr
@@ -903,21 +904,81 @@ async function build(structure = source, refit = true, slice = false) {
     nonSolid = new Set()
     collBoxCache = new Map()
     const isPlane = el => el.from[0] === el.to[0] || el.from[1] === el.to[1] || el.from[2] === el.to[2]
-    async function template(stateIdx) {
-      if (templates.has(stateIdx)) return templates.get(stateIdx)
+
+    // seeded rotations: states whose blockstate has weighted arrays get one
+    // template per distinct pick across 16 probe seeds, chosen per position
+    const RSEEDS = Array.from({ length: 16 }, (_, i) => Math.imul(i + 1, 0x9E3779B1) >>> 0)
+    const randomStates = new Map()
+    async function hasRandomModels(name) {
+      if (randomStates.has(name)) return randomStates.get(name)
+      let random = false
+      try {
+        const [ns, block] = name.includes(":") ? name.split(":") : ["minecraft", name]
+        const buf = await lib.readFile(`assets/${ns}/blockstates/${block}.json`, assets)
+        if (buf) {
+          const json = JSON.parse(new TextDecoder().decode(buf))
+          if (json.variants) random = Object.values(json.variants).some(v => Array.isArray(v) && v.length > 1)
+          else if (json.multipart) random = json.multipart.some(p => Array.isArray(p.apply) && p.apply.length > 1)
+        }
+      } catch {}
+      randomStates.set(name, random)
+      return random
+    }
+    const statePicks = new Map()
+    async function picks(stateIdx) {
+      if (statePicks.has(stateIdx)) return statePicks.get(stateIdx)
       const entry = structure.palette[stateIdx]
-      let tmpl = null
+      let data = null
       if (entry && !AIR.test(entry.Name)) {
-        const g = new THREE.Group()
-        g.userData.daytime = daytimeUniform
         try {
           const name = LEGACY_RENAMES[entry.Name.replace("minecraft:", "")] ?? entry.Name
           const props = fixLegacyProps(name.replace("minecraft:", ""), entry.Properties)
+          data = { name, props, models: [await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true })], buckets: null }
+          if (await hasRandomModels(name)) {
+            const byKey = new Map([[JSON.stringify(data.models[0]), 0]])
+            const buckets = []
+            for (const seed of RSEEDS) {
+              const picked = await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true, seed })
+              const k = JSON.stringify(picked)
+              let v = byKey.get(k)
+              if (v === undefined) {
+                v = data.models.length
+                byKey.set(k, v)
+                data.models.push(picked)
+              }
+              buckets.push(v)
+            }
+            if (data.models.length > 1) data.buckets = buckets
+          }
+        } catch { data = null }
+      }
+      statePicks.set(stateIdx, data)
+      return data
+    }
+    function posHash(x, y, z) {
+      const h = Math.imul(x, 3129871) ^ Math.imul(z, 116129781) ^ y
+      return (Math.imul(Math.imul(h, h), 42317861) + Math.imul(h, 11) | 0) >>> 16
+    }
+    function variantAt(stateIdx, pos) {
+      const p = statePicks.get(stateIdx)
+      return p?.buckets ? p.buckets[posHash(pos[0], pos[1], pos[2]) & 15] : 0
+    }
+    const tmplKey = (stateIdx, variant) => variant ? stateIdx + ":" + variant : stateIdx
+    async function template(stateIdx, variant = 0) {
+      const key = tmplKey(stateIdx, variant)
+      if (templates.has(key)) return templates.get(key)
+      const p = await picks(stateIdx)
+      let tmpl = null
+      if (p) {
+        const entry = structure.palette[stateIdx]
+        const g = new THREE.Group()
+        g.userData.daytime = daytimeUniform
+        try {
           // plain blocks need a block too, for the library's light emission
-          const block = entry.__block ?? { id: name, properties: props ?? {} }
+          const block = entry.__block ?? { id: p.name, properties: p.props ?? {} }
           // all-plane models (plants, vines, rails) have no collision in game
           let any = false, allPlanes = true
-          for (const model of await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true })) {
+          for (const model of p.models[variant]) {
             const data = await lib.resolveModelData(assets, model)
             await lib.loadModel(g, assets, data, { display: {}, lighting: state.lighting, light: newLight, animate: false, fluidHeights: entry.__fluidHeights, block, neighbors: block.neighbors })
             for (const el of data?.elements ?? []) { any = true; if (!isPlane(el)) allPlanes = false }
@@ -926,7 +987,7 @@ async function build(structure = source, refit = true, slice = false) {
         } catch {}
         if (g.children.length) tmpl = g
       }
-      templates.set(stateIdx, tmpl)
+      templates.set(key, tmpl)
       return tmpl
     }
 
@@ -955,7 +1016,8 @@ async function build(structure = source, refit = true, slice = false) {
     let sampleAt = null, tSample = 0
     state.progress = { phase: "build", done: 1500, total: 10000 }
     for (let i = 0; i < total; i++) {
-      if (await template(solid[i].state)) placedCount++
+      await picks(solid[i].state)
+      if (await template(solid[i].state, variantAt(solid[i].state, solid[i].pos))) placedCount++
       if (i % 400 === 399) {
         state.status = `building… ${i + 1}/${total}`
         state.progress = { phase: "build", done: 1500 + Math.round((i + 1) / total * 8500), total: 10000 }
@@ -1053,6 +1115,7 @@ async function build(structure = source, refit = true, slice = false) {
     const tOpt = performance.now()
     const opt = await optimise(optStruct, templates, position, {
       lib,
+      templateKey: b => tmplKey(b.state, variantAt(b.state, b.pos)),
       getCullFaces: opts => {
         const [id, blockstates] = legacyCull(opts.id, opts.blockstates)
         const neighbors = {}
@@ -1135,7 +1198,7 @@ async function build(structure = source, refit = true, slice = false) {
     state.info = {
       size: `${sx}×${sy}×${sz}`,
       blocks: placedCount,
-      palette: templates.size,
+      palette: statePicks.size,
       draws: drawCalls + doorDraws + entityDraws,
       tris
     }
