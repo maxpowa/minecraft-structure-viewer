@@ -1,9 +1,9 @@
 <script setup>
-import { tab } from "../composables/useTab.js"
+import { tab, featuresEnabled } from "../composables/useTab.js"
 </script>
 
 <template>
-  <nav class="tabs">
+  <nav class="tabs" v-if="featuresEnabled">
     <button :class="{ active: tab === 'structures' }" @click="tab = 'structures'">Structures</button>
     <button :class="{ active: tab === 'features' }" @click="tab = 'features'">Features</button>
   </nav>

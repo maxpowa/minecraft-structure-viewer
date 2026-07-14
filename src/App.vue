@@ -10,7 +10,7 @@ import { useLock } from "./composables/useLock.js"
 import { useWalk } from "./composables/useWalk.js"
 import { useContainer } from "./composables/useContainer.js"
 import { useSlicers } from "./composables/useSlicers.js"
-import { tab } from "./composables/useTab.js"
+import { tab, featuresEnabled } from "./composables/useTab.js"
 import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
 import FeaturesSection from "./components/FeaturesSection.vue"
@@ -71,7 +71,7 @@ onMounted(async () => {
   const params = new URLSearchParams(location.search)
   const vanilla = params.get("vanilla")
   const debug = params.get("debug")
-  const feature = params.get("feature")
+  const feature = featuresEnabled ? params.get("feature") : null
   const stop = watch(() => structures.state.names.length, async n => {
     if (!n) return
     stop()
@@ -99,7 +99,7 @@ onMounted(async () => {
       <template v-else>
         <PacksSection />
         <StructuresSection v-show="tab === 'structures'" />
-        <FeaturesSection v-show="tab === 'features'" />
+        <FeaturesSection v-if="featuresEnabled" v-show="tab === 'features'" />
         <WorldSection />
         <ViewSection />
         <SlicersSection />
