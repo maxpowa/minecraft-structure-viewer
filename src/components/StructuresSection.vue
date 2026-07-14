@@ -224,6 +224,11 @@ function onFile(e) {
 }
 
 .controls input {
+  flex: 2;
+  min-width: 0;
+}
+
+.controls select {
   flex: 1;
   min-width: 0;
 }
