@@ -65,8 +65,10 @@ Enable it with either:
   npm run build -- --mode mod
   ```
 
-  then copy `dist/` into the mod at `assets/structorium/web/` (or point the mod's
-  `web.viewerDir` config at it). See `.env.mod`.
+  See `.env.mod`. Normally you don't run this by hand: the mod's Gradle build
+  runs it and bundles `dist/` automatically (checkout this repo next to the mod,
+  or set `-PstructoriumViewerDir`). Building manually is only for pointing the
+  mod's `web.viewerDir` at a `dist/` you serve yourself.
 
 `?version=resolved|original|pack` (with `?pack=<id>`) selects which copy of a
 structure to fetch and is shareable.
