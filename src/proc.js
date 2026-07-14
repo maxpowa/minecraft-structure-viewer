@@ -22,9 +22,6 @@ export const PROC = [
   // portal (in the state you started from) plus the ten spikes
   { prefix: "minecraft/builtin/end/exit_portal/inactive", entry: "minecraft/builtin/end/exit_portal/inactive", label: "End Spikes", gen: "end_spikes", steps: false },
   { prefix: "minecraft/builtin/end/exit_portal/active", entry: "minecraft/builtin/end/exit_portal/active", label: "End Spikes", gen: "end_spikes_active", steps: false },
-  // single spikes roll a size of their kind (uncaged 0/3-9, caged 1-2)
-  { prefix: "minecraft/builtin/end/spike", entry: "minecraft/builtin/end/spike", label: "End Spike", gen: "end_spike", steps: false, reroll: true },
-  { prefix: "minecraft/builtin/end/spike_caged", entry: "minecraft/builtin/end/spike_caged", label: "Caged End Spike", gen: "end_spike_caged", steps: false, reroll: true },
   { prefix: "minecraft/builtin/stronghold/", entry: "minecraft/builtin/stronghold/stairs_down", label: "Stronghold", gen: "stronghold", steps: true, maxDepth: 50 },
   // the room is the game's start piece, so it hosts the full mineshaft
   // session; the random pieces get their own re-roll sessions

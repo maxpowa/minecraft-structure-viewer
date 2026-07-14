@@ -3,16 +3,19 @@ import { loadLibrary } from "../lib.js"
 import { usePacks } from "../composables/usePacks.js"
 import { runMonument } from "./monument.js"
 import { mineshaftPieceGens, runMineshaftRoom, runMineshaftRoomMesa } from "./mineshaft.js"
-import { runEndSpike, runEndSpikeCaged } from "./endspikes.js"
+import { makeEndSpikeSize } from "./endspikes.js"
 
 // structures with no .nbt at all: the tree entry is synthesized and a load
 // runs the generator at seed 0
 export const GENERATED = {
   "minecraft/builtin/ocean_monument": runMonument,
   "minecraft/builtin/mineshaft/normal/room": runMineshaftRoom,
-  "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa,
-  "minecraft/builtin/end/spike": runEndSpike,
-  "minecraft/builtin/end/spike_caged": runEndSpikeCaged
+  "minecraft/builtin/mineshaft/mesa/room": runMineshaftRoomMesa
+}
+// the ten spikes, named by their obsidian height (sizes 1 and 2 are caged)
+for (let size = 0; size < 10; size++) {
+  const caged = size === 1 || size === 2 ? "_caged" : ""
+  GENERATED[`minecraft/builtin/end/spike_${76 + size * 3}${caged}`] = makeEndSpikeSize(size)
 }
 for (const type of ["normal", "mesa"]) {
   for (const len of [10, 15, 20]) {

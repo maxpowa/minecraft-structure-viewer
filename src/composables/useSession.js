@@ -7,9 +7,9 @@ import { useBuild } from "./useBuild.js"
 import { useScene } from "./useScene.js"
 import { useLock } from "./useLock.js"
 import { readStructure } from "../nbt.js"
-import { AIR, EMPTY, JIGSAW, mix, parseState, poolTemplates } from "../transforms.js"
+import { AIR, EMPTY, JIGSAW, mix, parseState, poolTemplates, rand32 } from "../transforms.js"
 import { runJigsaw } from "../jigsaw.js"
-import { mineshaftPieceGens, rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpike, runEndSpikeCaged, runEndSpikes, runEndSpikesActive, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
+import { mineshaftPieceGens, rerollGen, runDesertPyramid, runDesertWell, runDungeon, runEndCity, runEndSpikes, runEndSpikesActive, runFortress, runIgloo, runJungleTemple, runMansion, runMineshaft, runMineshaftMesa, runMonument, runStronghold } from "../generators/index.js"
 import { PROC } from "../proc.js"
 
 // A level session exists for jigsaw structures (any palette block named
@@ -58,7 +58,6 @@ let urlSeed = null, urlLevel = null
   }
 }
 
-const rand32 = () => (Math.random() * 0x100000000) >>> 0
 function nsSplit(ref) {
   const i = ref.indexOf(":")
   return i < 0 ? ["minecraft", ref] : [ref.slice(0, i), ref.slice(i + 1)]
@@ -88,7 +87,6 @@ const generators = {
   dungeon_5x7: rerollGen("minecraft/builtin/dungeon/5x7"),
   dungeon_7x7: rerollGen("minecraft/builtin/dungeon/7x7"),
   fortress: runFortress, end_spikes: runEndSpikes, end_spikes_active: runEndSpikesActive, stronghold: runStronghold,
-  end_spike: runEndSpike, end_spike_caged: runEndSpikeCaged,
   mineshaft: runMineshaft, mineshaft_mesa: runMineshaftMesa, monument: runMonument,
   ...mineshaftPieceGens
 }

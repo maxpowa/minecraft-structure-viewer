@@ -1,4 +1,4 @@
-import { rnd, shuffle } from "../transforms.js"
+import { rand32, rnd, shuffle, statePicker } from "../transforms.js"
 
 // end spikes (EndSpikeFeature): obsidian pillars, radius 2 + size/3, height
 // 76 + size*3, iron bar cages on the two smallest guarded sizes (1 and 2),
@@ -8,21 +8,6 @@ import { rnd, shuffle } from "../transforms.js"
 
 // the podium's portal ring sits at the End's surface height
 const PORTAL_Y = 62
-
-function statePicker() {
-  const palette = [], palIdx = new Map()
-  const stateFor = (Name, Properties) => {
-    const pk = Name + "|" + JSON.stringify(Properties ?? null)
-    let i = palIdx.get(pk)
-    if (i === undefined) {
-      i = palette.length
-      palette.push(Properties ? { Name, Properties } : { Name })
-      palIdx.set(pk, i)
-    }
-    return i
-  }
-  return { palette, stateFor }
-}
 
 function buildSpike(stateFor, blocks, entities, cx, cz, size) {
   const radius = 2 + Math.floor(size / 3)
@@ -80,7 +65,7 @@ function normalise(palette, blocks, entities) {
 }
 
 export const makeEndSpikes = active => async (loadStruct, { seed } = {}) => {
-  const rand = rnd(seed ?? (Math.random() * 0x100000000) >>> 0)
+  const rand = rnd(seed ?? rand32())
   const sizes = shuffle([0, 1, 2, 3, 4, 5, 6, 7, 8, 9], rand)
   const { palette, stateFor } = statePicker()
   const blocks = [], entities = []
@@ -113,18 +98,18 @@ export const makeEndSpikes = active => async (loadStruct, { seed } = {}) => {
 export const runEndSpikes = makeEndSpikes(false)
 export const runEndSpikesActive = makeEndSpikes(true)
 
-const CAGED_SIZES = [1, 2]
+// a single spike is deterministic given its size, so each size is its own
+// entry; the random pick survives only for the end_spike feature type
 const OPEN_SIZES = [0, 3, 4, 5, 6, 7, 8, 9]
 
-export const makeEndSpike = caged => async (loadStruct, { seed } = {}) => {
-  const rand = rnd(seed ?? (Math.random() * 0x100000000) >>> 0)
-  const pool = caged ? CAGED_SIZES : OPEN_SIZES
-  const size = pool[Math.floor(rand() * pool.length)]
+export const makeEndSpikeSize = size => async () => {
   const { palette, stateFor } = statePicker()
   const blocks = [], entities = []
   buildSpike(stateFor, blocks, entities, 0, 0, size)
   return { structure: normalise(palette, blocks, entities), maxDepth: 1 }
 }
 
-export const runEndSpike = makeEndSpike(false)
-export const runEndSpikeCaged = makeEndSpike(true)
+export const runEndSpike = async (loadStruct, { seed } = {}) => {
+  const rand = rnd(seed ?? rand32())
+  return makeEndSpikeSize(OPEN_SIZES[Math.floor(rand() * OPEN_SIZES.length)])()
+}
