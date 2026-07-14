@@ -78,7 +78,7 @@ async function main() {
 
   log("picking default seeds (median-size roll per feature)")
   const { defaults, statics } = await computeDefaults(ctx)
-  files.set("viewer/default_seeds.json", Buffer.from(JSON.stringify(defaults)))
+  files.set("viewer/default_seeds.json", Buffer.from(JSON.stringify(defaults, null, 2)))
   files.set("viewer/static_features.json", Buffer.from(JSON.stringify(statics, null, 2)))
 
   const root = path.resolve(here, "../..")
