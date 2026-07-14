@@ -2,7 +2,7 @@
 //   version picks the cached client.jar; downloads through the shared cache when missing.
 import path from "node:path"
 import { fileURLToPath } from "node:url"
-import { prepareVersion } from "../builtin/common.js"
+import { prepareVersion, prepareClient } from "../builtin/common.js"
 import { buildGenCtx, featureFilesFromZip } from "./lib.js"
 import { generateFeature } from "../../src/features/index.js"
 import { rnd } from "../../src/transforms.js"
@@ -16,7 +16,7 @@ const { id, verDir } = await prepareVersion(cache, positional[0], log)
 log("version:", id)
 
 const files = featureFilesFromZip(path.resolve(here, "../../public/features.zip"))
-const ctx = buildGenCtx(files, path.join(verDir, "client.jar"))
+const ctx = buildGenCtx(files, await prepareClient(verDir, id, log))
 
 const failures = new Map()
 let ok = 0, empty = 0

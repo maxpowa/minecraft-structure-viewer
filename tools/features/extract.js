@@ -5,7 +5,7 @@ import fs from "node:fs"
 import path from "node:path"
 import { execFileSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
-import { javaBin, packBundle, prepareVersion, walk, writeBundle } from "../builtin/common.js"
+import { javaBin, packBundle, prepareClient, prepareVersion, walk, writeBundle } from "../builtin/common.js"
 import { buildGenCtx } from "./lib.js"
 import { generateFeature } from "../../src/features/index.js"
 import { rnd } from "../../src/transforms.js"
@@ -38,7 +38,7 @@ async function main() {
     if (files.has(key)) files.delete(key)
     else log(`note: structure dupe "${name}" no longer exists in this version, prune it from STRUCTURE_DUPES`)
   }
-  const ctx = buildGenCtx(files, path.join(verDir, "client.jar"))
+  const ctx = buildGenCtx(files, await prepareClient(verDir, id, log))
 
   // template stampers duplicate the structures tab; the scan follows
   // references, so wrappers go with the stamp they wrap

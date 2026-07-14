@@ -39,7 +39,15 @@ export async function resolveVersion(requested) {
   const meta = await (await fetch(entry.url)).json()
   const server = meta.downloads?.server?.url
   if (!server) throw new Error(`version ${id} is missing a server download`)
-  return { id, server }
+  return { id, server, client: meta.downloads?.client?.url }
+}
+
+export async function prepareClient(verDir, id, log) {
+  const dest = path.join(verDir, "client.jar")
+  if (fs.existsSync(dest)) return dest
+  const version = await resolveVersion(id)
+  if (!version.client) throw new Error(`version ${id} is missing a client download`)
+  return download(version.client, dest, log)
 }
 
 // the server jar is a bundler holding the real jar + libraries as entries
