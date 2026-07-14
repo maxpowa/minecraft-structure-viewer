@@ -954,13 +954,13 @@ async function build(structure = source, refit = true, slice = false) {
     const [sx, sy, sz] = structure.size
     state.status = "building…"
 
-    // per-block light: flood filled over the unsliced structure so cutaway
-    // views keep the real interior darkness (and sliced-away torches still
-    // glow). oversized scenes skip it rather than allocating a huge volume
+    // per-block light: flood filled over what actually builds, so a slice
+    // relights the cutaway (sky pours into the cut, sliced-away torches go
+    // out). oversized scenes skip it rather than allocating a huge volume
     if (state.lighting === "world" && lib.computeSceneLight && (sx + 2) * (sy + 2) * (sz + 2) <= 48000000) {
       const lightBlocks = []
-      for (const b of unsliced.blocks) {
-        const e = unsliced.palette[b.state]
+      for (const b of structure.blocks) {
+        const e = structure.palette[b.state]
         if (!e?.Name || AIR.test(e.Name)) continue
         const name = LEGACY_RENAMES[e.Name.replace("minecraft:", "")] ?? e.Name
         lightBlocks.push({ id: name, properties: fixLegacyProps(name.replace("minecraft:", ""), e.Properties) ?? {}, pos: b.pos })
