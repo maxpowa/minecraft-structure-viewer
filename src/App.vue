@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from "vue"
 import { loadLibrary } from "./lib.js"
 import { usePacks } from "./composables/usePacks.js"
 import { useStructures } from "./composables/useStructures.js"
-import { useStructure, decodeVanillaParam } from "./composables/useStructure.js"
+import { useStructure, decodeVanillaParam, parseSeedParam } from "./composables/useStructure.js"
 import { useBuild } from "./composables/useBuild.js"
 import { useScene } from "./composables/useScene.js"
 import { useLock } from "./composables/useLock.js"
@@ -78,8 +78,8 @@ onMounted(async () => {
     const rels = (await decodeVanillaParam(vanilla)).filter(r => structures.has(r))
     if (debug != null) loadDebug(debug)
     else if (feature != null && feature.includes(",")) loadFeatures(feature.split(","))
-    else if (feature != null && params.get("field") != null) loadFeatureField(feature, params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0)
-    else if (feature != null) loadFeature(feature, params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0)
+    else if (feature != null && params.get("field") != null) loadFeatureField(feature, parseSeedParam(params.get("fseed")))
+    else if (feature != null) loadFeature(feature, parseSeedParam(params.get("fseed")))
     else if (rels.length > 1) loadMany(rels)
     else if (rels.length === 1) loadVanilla(rels[0])
     else if (structures.has(DEFAULT)) loadVanilla(DEFAULT)

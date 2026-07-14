@@ -88,6 +88,13 @@ export async function decodeVanillaParam(param) {
   }
 }
 
+// seeds in urls are hex, matching the session's ?seed; undefined when the
+// param is absent or malformed so loads fall back to the default seed
+export function parseSeedParam(param) {
+  if (param == null || !/^[0-9a-f]{1,8}$/i.test(param)) return undefined
+  return parseInt(param, 16) >>> 0
+}
+
 // switching structures pushes a history entry so the browser back button
 // walks through what you viewed. the first load and popstate-driven loads
 // replace instead, so history never gains duplicate or looping entries
@@ -100,7 +107,7 @@ function setVanillaParam(rel, featureRel, featureSeed, featureField) {
   const before = u.searchParams.get("vanilla") + "|" + u.searchParams.get("feature")
   rel ? u.searchParams.set("vanilla", rel) : u.searchParams.delete("vanilla")
   featureRel ? u.searchParams.set("feature", featureRel) : u.searchParams.delete("feature")
-  featureRel && featureSeed ? u.searchParams.set("fseed", String(featureSeed)) : u.searchParams.delete("fseed")
+  featureRel && featureSeed ? u.searchParams.set("fseed", featureSeed.toString(16)) : u.searchParams.delete("fseed")
   featureRel && featureField ? u.searchParams.set("field", "1") : u.searchParams.delete("field")
   // a load resets any level session; its params must not leak to the next one
   u.searchParams.delete("seed")
@@ -123,7 +130,7 @@ addEventListener("popstate", async () => {
     }
     const feature = params.get("feature")
     if (feature != null) {
-      const fseed = params.get("fseed") == null ? undefined : Number(params.get("fseed")) || 0
+      const fseed = parseSeedParam(params.get("fseed"))
       if (feature.includes(",")) await loadFeatures(feature.split(","))
       else if (params.get("field") != null) await loadFeatureField(feature, fseed)
       else await loadFeature(feature, fseed)

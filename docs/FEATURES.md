@@ -145,9 +145,10 @@ spec and a working implementation.
   membership, shift-click loads the range from the anchor; entries from
   both tabs can combine into one packed build (`apply()` splits the
   selections back per tab).
-- URLs: single feature `?feature=<rel>` (+`&fseed=<seed>` only when it
-  differs from the default); several features `?feature=a,b,c` (defaults,
-  no seeds); all-structure combos keep the encoded `?vanilla=!...` form;
+- URLs: single feature `?feature=<rel>` (+`&fseed=<hex seed>` only when it
+  differs from the default; hex like the session's ?seed, parsed by
+  `parseSeedParam`); several features `?feature=a,b,c` (defaults, no
+  seeds); all-structure combos keep the encoded `?vanilla=!...` form;
   mixed combos get no url.
 - Re-roll: one feature -> fresh rand32 seed in ?fseed; several features ->
   every one re-rolls (seeds not persisted); hidden for mixed combos since
