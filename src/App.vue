@@ -11,7 +11,6 @@ import { useWalk } from "./composables/useWalk.js"
 import { useContainer } from "./composables/useContainer.js"
 import { useSlicers } from "./composables/useSlicers.js"
 import { tab, featuresEnabled } from "./composables/useTab.js"
-import PacksSection from "./components/PacksSection.vue"
 import StructuresSection from "./components/StructuresSection.vue"
 import FeaturesSection from "./components/FeaturesSection.vue"
 import WorldSection from "./components/WorldSection.vue"
@@ -97,7 +96,6 @@ onMounted(async () => {
       </header>
       <div v-if="libError" class="lib-error">Renderer failed: {{ libError }}</div>
       <template v-else>
-        <PacksSection />
         <StructuresSection v-show="tab === 'structures'" />
         <FeaturesSection v-if="featuresEnabled" v-show="tab === 'features'" />
         <WorldSection />
