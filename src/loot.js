@@ -211,7 +211,7 @@ export function describeTable(table) {
           name: type === "item" ? strip(e.name)
             : type === "placebo:stack_entry" ? strip(e.stack?.id ?? "item")
             : type === "loot_table" ? "table: " + (typeof e.value === "string" ? strip(e.value) : strip(e.name ?? "inline"))
-            : prettyName(type.includes(":") ? type.slice(type.indexOf(":") + 1) : type),
+            : type,
           pct: +((e.weight ?? 1) / total * 100).toFixed(1),
           count: sc ? fmtNum(sc.count) : stackCount,
           note: notes.join(", ")
