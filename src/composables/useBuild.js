@@ -191,6 +191,9 @@ export const NOON = 6000
 
 const state = reactive({
   lighting: "world",
+  // world lighting without the flood-filled volume: everything renders at
+  // full light (daytime has nothing to modulate, so its slider hides)
+  fullbright: false,
   daytime: NOON,
   hideStructureBlocks: localStorage.getItem("hideStructureBlocks") !== "false",
   hasStructureBlocks: false,
@@ -238,6 +241,18 @@ function answerWarn(ok) {
 // re-lights the whole scene with no rebuild.
 const daytimeUniform = { value: NOON }
 watch(() => state.daytime, v => { daytimeUniform.value = v })
+
+// fullbright parks daytime at noon and hands the chosen time back when it
+// turns off (the slider is hidden while it holds the value)
+let savedDaytime = NOON
+watch(() => state.fullbright, on => {
+  if (on) {
+    savedDaytime = state.daytime
+    state.daytime = NOON
+  } else {
+    state.daytime = savedDaytime
+  }
+})
 
 // ---- openable blocks (doors/trapdoors/gates): never baked into the merged
 // mesh. both open + closed models are pre-built and a toggle just flips which
@@ -957,7 +972,7 @@ async function build(structure = source, refit = true, slice = false) {
     // per-block light: flood filled over what actually builds, so a slice
     // relights the cutaway (sky pours into the cut, sliced-away torches go
     // out). oversized scenes skip it rather than allocating a huge volume
-    if (state.lighting === "world" && lib.computeSceneLight && (sx + 2) * (sy + 2) * (sz + 2) <= 48000000) {
+    if (state.lighting === "world" && !state.fullbright && lib.computeSceneLight && (sx + 2) * (sy + 2) * (sz + 2) <= 48000000) {
       const lightBlocks = []
       for (const b of structure.blocks) {
         const e = structure.palette[b.state]
@@ -1272,7 +1287,7 @@ async function build(structure = source, refit = true, slice = false) {
   }
 }
 
-watch(() => state.lighting, () => build(undefined, false))
+watch(() => [state.lighting, state.fullbright], () => build(undefined, false))
 watch(() => state.hideStructureBlocks, v => {
   localStorage.setItem("hideStructureBlocks", String(v))
   build(undefined, false)

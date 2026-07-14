@@ -32,7 +32,11 @@ const collapsed = ref(true)
     </div>
     <div class="checks">
       <template v-if="buildState.lighting === 'world'">
-        <label class="check daytime">
+        <label class="check">
+          <input type="checkbox" v-model="buildState.fullbright" :disabled="locked">
+          Fullbright
+        </label>
+        <label v-if="!buildState.fullbright" class="check daytime">
           Daytime
           <input type="range" min="0" max="23999" v-model.number="buildState.daytime">
           <span class="value">{{ buildState.daytime }}</span>
