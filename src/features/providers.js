@@ -41,6 +41,24 @@ export function sampleInt(p, rand) {
   return typeof p.value === "number" ? p.value : 0
 }
 
+export function intBounds(p) {
+  if (typeof p === "number") return [p, p]
+  if (p == null) return [0, 0]
+  switch (strip(p.type)) {
+    case "constant": return [p.value, p.value]
+    case "clamped": {
+      const [a, b] = intBounds(p.source)
+      return [Math.max(p.min_inclusive, a), Math.min(p.max_inclusive, b)]
+    }
+    case "weighted_list": {
+      const bounds = p.distribution.map(e => intBounds(e.data))
+      return [Math.min(...bounds.map(b => b[0])), Math.max(...bounds.map(b => b[1]))]
+    }
+    case "trapezoid": return [p.min ?? p.min_inclusive, p.max ?? p.max_inclusive]
+  }
+  return [p.min_inclusive ?? p.value ?? 0, p.max_inclusive ?? p.value ?? 0]
+}
+
 export function sampleFloat(p, rand) {
   if (typeof p === "number") return p
   if (p == null) return 0

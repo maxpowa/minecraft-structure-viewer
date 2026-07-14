@@ -1,5 +1,5 @@
 // ports of the game's placement code over an empty world: the viewer's floor grid is the ground
-import { nextInt, sampleFloat, sampleInt, sampleState, pickWeighted } from "./providers.js"
+import { nextInt, sampleFloat, sampleInt, sampleState, pickWeighted, intBounds } from "./providers.js"
 import { generateTree, generateFallenTree } from "./tree.js"
 import { runEndSpike } from "../generators/endspikes.js"
 import { DIR, HORIZ, statePicker } from "../transforms.js"
@@ -648,26 +648,55 @@ Object.assign(TYPES, {
   },
 
   async large_dripstone(world, json, rand, resolvePlaced, ox, oy, oz) {
-    const radius = Math.min(8, sampleInt(json.column_radius, rand))
-    const scale = sampleFloat(json.height_scale, rand)
-    const gap = 2 + nextInt(rand, 3)
-    const spike = (baseY, dir, bluntness) => {
-      const height = Math.max(3, Math.round(radius * scale * 2))
-      for (let i = 0; i < height; i++) {
-        const rr = Math.max(0, radius * Math.pow(1 - i / height, bluntness) - 0.5)
-        const r = Math.floor(rr)
-        for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
-          if (dx * dx + dz * dz > rr * rr + 1) continue
-          world.set(ox + dx, baseY + i * dir, oz + dz, { Name: "minecraft:dripstone_block" })
+    const caveHeight = 4 + nextInt(rand, 27)
+    const floorY = oy, ceilY = oy + caveHeight - 1
+    const originY = floorY + nextInt(rand, caveHeight)
+    const [rMin, rMaxProvider] = intBounds(json.column_radius)
+    const ratio = json.max_column_radius_to_cave_height_ratio
+    const rMax = Math.min(Math.max(Math.trunc(caveHeight * ratio), rMin), rMaxProvider)
+    const radius = rMin + nextInt(rand, rMax - rMin + 1)
+    const stalactite = { rootY: ceilY, dir: -1, radius, bluntness: sampleFloat(json.stalactite_bluntness, rand), scale: sampleFloat(json.height_scale, rand) }
+    const stalagmite = { rootY: floorY, dir: 1, radius, bluntness: sampleFloat(json.stalagmite_bluntness, rand), scale: sampleFloat(json.height_scale, rand) }
+    const suitable = s => s.radius >= json.min_radius_for_wind && s.bluntness >= json.min_bluntness_for_wind
+    let wind = null
+    if (suitable(stalactite) && suitable(stalagmite)) {
+      const speed = sampleFloat(json.wind_speed, rand)
+      const angle = rand() * Math.PI
+      wind = { x: Math.cos(angle) * speed, z: Math.sin(angle) * speed, max: 16 - radius }
+    }
+    const windAt = y => {
+      if (!wind) return [0, 0]
+      const dy = originY - y
+      return [
+        Math.min(wind.max, Math.max(-wind.max, Math.floor(wind.x * dy))),
+        Math.min(wind.max, Math.max(-wind.max, Math.floor(wind.z * dy)))
+      ]
+    }
+    const heightAt = (dist, s) => {
+      const d = Math.max(dist, s.bluntness) / s.radius * 0.384
+      const h = Math.max(s.scale * (0.75 * Math.pow(d, 4 / 3) - Math.pow(d, 2 / 3) - Math.log(d) / 3), 0)
+      return Math.trunc(h / 0.384 * s.radius)
+    }
+    const place = s => {
+      const rootY = s.rootY - s.dir
+      for (let dx = -s.radius; dx <= s.radius; dx++) {
+        for (let dz = -s.radius; dz <= s.radius; dz++) {
+          const dist = Math.sqrt(dx * dx + dz * dz)
+          if (dist > s.radius) continue
+          let h = heightAt(dist, s)
+          if (h <= 0) continue
+          if (rand() < 0.2) h = Math.trunc(h * (0.8 + rand() * 0.2))
+          for (let i = 0; i < h; i++) {
+            const y = rootY + i * s.dir
+            if (y < floorY || y > ceilY) continue
+            const [wx, wz] = windAt(y)
+            world.set(ox + dx + wx, y, oz + dz + wz, { Name: "minecraft:dripstone_block" })
+          }
         }
-        if (r === 0 && i > height * 0.6) break
       }
     }
-    const stalagB = sampleFloat(json.stalagmite_bluntness, rand)
-    const stalacB = sampleFloat(json.stalactite_bluntness, rand)
-    const height = Math.max(3, Math.round(radius * scale * 2))
-    spike(oy, 1, stalagB)
-    spike(oy + height * 2 + gap, -1, stalacB)
+    place(stalactite)
+    place(stalagmite)
   },
 
   async block_blob(world, json, rand, resolvePlaced, ox, oy, oz) {
