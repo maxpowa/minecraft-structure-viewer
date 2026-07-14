@@ -44,8 +44,20 @@ async function main() {
     if (files.has(key)) files.delete(key)
     else log(`note: structure dupe "${name}" no longer exists in this version, prune it from STRUCTURE_DUPES`)
   }
-
   const ctx = buildGenCtx(files, path.join(verDir, "client.jar"))
+
+  // template stampers only ever show structure nbts the structures tab
+  // already lists, and their re-rolls barely differ, so they get the dupes
+  // treatment too. the scan follows references (rooted_sulfur_spring wraps
+  // the placed sulfur_spring by name), so wrappers go with their stamp
+  const templateBased = []
+  for (const [rel, json] of Array.from(ctx.featureByRel)) {
+    if (await stampsTemplates(ctx, json, new Set())) {
+      templateBased.push(rel)
+      files.delete(`data/${rel.replace("/", "/worldgen/feature/")}.json`)
+      ctx.featureByRel.delete(rel)
+    }
+  }
 
   const hidden = await computeHidden(ctx)
   files.set("viewer/hidden_features.json", Buffer.from(JSON.stringify(hidden, null, 2)))
@@ -61,7 +73,8 @@ async function main() {
   files.set("viewer/redundant_selectors.json", Buffer.from(JSON.stringify(selectors.sort(), null, 2)))
   // snapshot jars ship worldgen/feature JSONs as data, so deleting the dupes
   // from this zip isn't enough: the viewer also delists them by name
-  files.set("viewer/structure_dupes.json", Buffer.from(JSON.stringify(STRUCTURE_DUPES.map(n => "minecraft/" + n), null, 2)))
+  const dupes = STRUCTURE_DUPES.map(n => "minecraft/" + n).concat(templateBased).sort()
+  files.set("viewer/structure_dupes.json", Buffer.from(JSON.stringify(dupes, null, 2)))
 
   log("picking default seeds (median-size roll per feature)")
   const { defaults, statics } = await computeDefaults(ctx)
@@ -71,7 +84,7 @@ async function main() {
   const root = path.resolve(here, "../..")
   writeBundle(path.join(root, "bundled/features"), files)
   packBundle(path.join(root, "bundled/features"), path.join(root, "public/features.zip"))
-  log(`wrote bundled/features + public/features.zip: ${ctx.featureByRel.size} features, ${hidden.length} hidden as just-a-block, ${selectors.length} ref-only selectors delisted, ${statics.length} static`)
+  log(`wrote bundled/features + public/features.zip: ${ctx.featureByRel.size} features, ${hidden.length} hidden as just-a-block, ${selectors.length} ref-only selectors delisted, ${templateBased.length} template stampers excluded, ${statics.length} static`)
 }
 
 // the viewer already offers these under Structures (extracted builtins), so
@@ -92,6 +105,24 @@ const STRUCTURE_DUPES = [
 // a selector entry is a pure reference when it bottoms out in a registry id
 // rather than an inline feature config
 const isRef = x => typeof x === "string" || (x != null && typeof x === "object" && x.feature !== undefined && isRef(x.feature))
+
+// only pure template stampers: fossils also stamp templates but their
+// overlay processors rot the bones and embed coal/deepslate diamond ore,
+// which is real generation, so they stay features. string values resolve
+// through the registries (misses return null and count as plain strings)
+async function stampsTemplates(ctx, json, seen) {
+  if (json == null) return false
+  if (typeof json === "string") {
+    if (seen.has(json)) return false
+    seen.add(json)
+    const inner = await ctx.resolvePlaced(json)
+    return inner && typeof inner === "object" ? stampsTemplates(ctx, inner, seen) : false
+  }
+  if (typeof json !== "object") return false
+  if (!Array.isArray(json) && /^(minecraft:)?template$/.test(json.type ?? "")) return true
+  for (const v of Object.values(json)) if (await stampsTemplates(ctx, v, seen)) return true
+  return false
+}
 
 function selectorEntries(json) {
   switch ((json.type ?? "").replace("minecraft:", "")) {

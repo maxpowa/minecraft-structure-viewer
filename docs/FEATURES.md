@@ -123,6 +123,13 @@ spec and a working implementation.
   "no longer exists in this version, prune it" when a name disappears;
   that log line is the whole removal-maintenance story, since everything
   else regenerates from the registry each run.
+- Template stampers join the same list automatically (`usesTemplates`): a
+  feature with a `template` node anywhere in its config only ever shows
+  structure nbts the structures tab already lists (sulfur_spring), so it
+  is excluded from the site entirely, not hidden. `fossil` features stay:
+  their overlays rot the bones and embed coal / deepslate diamond ore
+  (there are no diamond nbts, a processor swaps the coal overlay), which
+  is generation the structures can't show.
 - `redundant_selectors.json`: selector types (random_selector,
   weighted_random_selector, simple_random_selector,
   random_boolean_selector) whose entries ALL bottom out in registry ids

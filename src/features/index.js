@@ -987,9 +987,18 @@ Object.assign(TYPES, {
   async fossil(world, json, rand, resolvePlaced, ox, oy, oz) {
     if (!world.loadStruct) throw new Error("fossils need structure templates")
     const idx = nextInt(rand, json.fossil_structures.length)
-    const s = await world.loadStruct(json.fossil_structures[idx])
-    if (!s) throw new Error(`missing structure ${json.fossil_structures[idx]}`)
-    mergeStructure(world, s, ox, oy, oz, 0.9, rand)
+    const fossil = await world.loadStruct(json.fossil_structures[idx])
+    if (!fossil) throw new Error(`missing structure ${json.fossil_structures[idx]}`)
+    mergeStructure(world, fossil, ox, oy, oz, 0.9, rand)
+    // the matching _coal overlay stamps over the bones at 0.1 integrity;
+    // the diamond processor list additionally swaps its coal ore for
+    // deepslate diamond ore (the two vanilla lists, not a processor engine)
+    const overlay = json.overlay_structures ? await world.loadStruct(json.overlay_structures[idx]) : null
+    if (overlay) {
+      const diamonds = strip(json.overlay_processors ?? "").includes("diamond")
+      const swap = e => diamonds && strip(e.Name) === "coal_ore" ? { ...e, Name: "minecraft:deepslate_diamond_ore" } : e
+      mergeStructure(world, overlay, ox, oy, oz, 0.1, rand, swap)
+    }
   },
 
   async template(world, json, rand, resolvePlaced, ox, oy, oz) {
@@ -1069,13 +1078,13 @@ function applyPlacement(world, mods, rand, x, y, z) {
 
 const STRUCT_AIR = /(^|:)(air|cave_air|void_air|structure_void|jigsaw|structure_block)$/
 
-function mergeStructure(world, s, ox, oy, oz, keepChance, rand) {
+function mergeStructure(world, s, ox, oy, oz, keepChance, rand, mapState) {
   const cx = Math.floor(s.size[0] / 2), cz = Math.floor(s.size[2] / 2)
   for (const b of s.blocks) {
     const e = s.palette[b.state]
     if (!e?.Name || STRUCT_AIR.test(e.Name)) continue
     if (rand() >= keepChance) continue
-    world.set(ox + b.pos[0] - cx, oy + b.pos[1], oz + b.pos[2] - cz, e)
+    world.set(ox + b.pos[0] - cx, oy + b.pos[1], oz + b.pos[2] - cz, mapState ? mapState(e) : e)
   }
 }
 
