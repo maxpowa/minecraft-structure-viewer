@@ -45,6 +45,27 @@ export function shuffle(arr, rand) {
   return a
 }
 
+export const rand32 = () => (Math.random() * 0x100000000) >>> 0
+
+// name sort with numbers compared as numbers (spike_76 before spike_103)
+export const numeric = new Intl.Collator("en", { numeric: true }).compare
+
+// a growing palette with entry dedup, the shape structures use
+export function statePicker() {
+  const palette = [], palIdx = new Map()
+  const stateFor = (Name, Properties) => {
+    const pk = Name + "|" + JSON.stringify(Properties ?? null)
+    let i = palIdx.get(pk)
+    if (i === undefined) {
+      i = palette.length
+      palette.push(Properties ? { Name, Properties } : { Name })
+      palIdx.set(pk, i)
+    }
+    return i
+  }
+  return { palette, stateFor }
+}
+
 // per-level seed derivation: one level can re-roll independently
 export function mix(a, b) {
   let h = Math.imul(a ^ Math.imul(b + 1, 0x9E3779B1), 0x85EBCA6B)
