@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from "vue"
 import { loadLibrary } from "./lib.js"
 import { usePacks } from "./composables/usePacks.js"
 import { useStructures } from "./composables/useStructures.js"
-import { useStructure, decodeVanillaParam, parseSeedParam } from "./composables/useStructure.js"
+import { useStructure, decodeVanillaParam, parseSeedParam, readStructureParam } from "./composables/useStructure.js"
 import { useBuild } from "./composables/useBuild.js"
 import { useScene } from "./composables/useScene.js"
 import { useLock } from "./composables/useLock.js"
@@ -68,7 +68,7 @@ onMounted(async () => {
   // or a default so the page never starts empty
   const DEFAULT = "minecraft/village/plains/houses/plains_small_house_1"
   const params = new URLSearchParams(location.search)
-  const vanilla = params.get("vanilla")
+  const vanilla = readStructureParam(params)
   const debug = params.get("debug")
   const feature = featuresEnabled ? params.get("feature") : null
   const stop = watch(() => structures.state.names.length, async n => {

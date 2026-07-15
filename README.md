@@ -75,9 +75,10 @@ structure to fetch and is shareable.
 
 ## URL params
 
-- `?vanilla=<name>` load a vanilla structure, e.g.
+- `?structure=<name>` load a structure by its resource-relative path, e.g.
   `minecraft/village/plains/town_centers/plains_fountain_01`; a
-  comma-separated list restores a packed combination
+  comma-separated list restores a packed combination. The legacy `?vanilla=`
+  key is still read as a fallback so older shared links keep working
 - `?channel=snapshot` use the snapshot jar
 - `?seed=<hex>&level=<n>` restore a jigsaw/procedural session
 - `?api=<url>` read structures from a Structorium mod (see above)

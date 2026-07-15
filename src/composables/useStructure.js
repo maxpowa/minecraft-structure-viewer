@@ -87,11 +87,19 @@ export function parseSeedParam(param) {
 let seededHistory = false
 let navigatingHistory = false
 
+// the structure list rides in the "structure" query param; older shared links
+// used "vanilla" (a legacy name from before mod/datapack structures), so reads
+// still honour it as a fallback while writes only ever emit the new key.
+export function readStructureParam(params) {
+  return params.get("structure") ?? params.get("vanilla")
+}
+
 function setVanillaParam(rel, featureRel, featureSeed, featureField) {
   if (navigatingHistory) return
   const u = new URL(location)
-  const before = u.searchParams.get("vanilla") + "|" + u.searchParams.get("feature")
-  rel ? u.searchParams.set("vanilla", rel) : u.searchParams.delete("vanilla")
+  const before = readStructureParam(u.searchParams) + "|" + u.searchParams.get("feature")
+  rel ? u.searchParams.set("structure", rel) : u.searchParams.delete("structure")
+  u.searchParams.delete("vanilla") // drop the legacy key so it can't shadow the new one
   featureRel ? u.searchParams.set("feature", featureRel) : u.searchParams.delete("feature")
   featureRel && featureSeed ? u.searchParams.set("fseed", featureSeed.toString(16)) : u.searchParams.delete("fseed")
   featureRel && featureField ? u.searchParams.set("field", "1") : u.searchParams.delete("field")
@@ -99,7 +107,7 @@ function setVanillaParam(rel, featureRel, featureSeed, featureField) {
   u.searchParams.delete("seed")
   u.searchParams.delete("level")
   u.searchParams.delete("debug")
-  const changed = u.searchParams.get("vanilla") + "|" + u.searchParams.get("feature") !== before
+  const changed = readStructureParam(u.searchParams) + "|" + u.searchParams.get("feature") !== before
   if (changed && seededHistory) history.pushState(null, "", u)
   else history.replaceState(null, "", u)
   seededHistory = true
@@ -122,7 +130,7 @@ addEventListener("popstate", async () => {
       else await loadFeature(feature, fseed)
       return
     }
-    const rels = (await decodeVanillaParam(params.get("vanilla"))).filter(r => structures.has(r))
+    const rels = (await decodeVanillaParam(readStructureParam(params))).filter(r => structures.has(r))
     if (rels.length > 1) await loadMany(rels)
     else if (rels.length === 1) await loadVanilla(rels[0])
   } finally {
