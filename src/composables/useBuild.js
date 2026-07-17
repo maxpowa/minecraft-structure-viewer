@@ -71,6 +71,28 @@ function fixLegacyProps(name, props) {
   return props
 }
 
+// A LEGACY_RENAMES entry only resolves under its new name in modern assets, but the
+// cutover is version-dependent: `chain` is native through 1.21, then became `iron_chain`
+// in the Copper-Age drop. So resolve against the *loaded* assets rather than renaming
+// unconditionally — keep the original when its blockstate still exists, else use the
+// rename when that one exists; if neither exists, keep the original (unchanged
+// missing-texture fallback). Cached per asset bundle (the WeakMap evicts on rebuild).
+const renameCache = new WeakMap()
+async function resolveRename(lib, assets, rawName) {
+  const target = LEGACY_RENAMES[rawName.replace("minecraft:", "")]
+  if (!target) return rawName
+  let cache = renameCache.get(assets)
+  if (!cache) renameCache.set(assets, cache = new Map())
+  if (cache.has(rawName)) return cache.get(rawName)
+  const has = async id => {
+    const [ns, block] = id.includes(":") ? id.split(":") : ["minecraft", id]
+    try { return !!(await lib.readFile(`assets/${ns}/blockstates/${block}.json`, assets)) } catch { return false }
+  }
+  const resolved = (!(await has(rawName)) && await has(target)) ? target : rawName
+  cache.set(rawName, resolved)
+  return resolved
+}
+
 async function remapFluidStates(structure, lib, assets) {
   const byPos = new Map()
   for (const b of structure.blocks) byPos.set(b.pos.join(","), b)
@@ -900,7 +922,7 @@ async function build(structure = source, refit = true, slice = false) {
       for (const b of structure.blocks) {
         const e = structure.palette[b.state]
         if (!e?.Name || AIR.test(e.Name)) continue
-        const name = LEGACY_RENAMES[e.Name.replace("minecraft:", "")] ?? e.Name
+        const name = await resolveRename(lib, assets, e.Name)
         lightBlocks.push({ id: name, properties: fixLegacyProps(name.replace("minecraft:", ""), e.Properties) ?? {}, pos: b.pos })
       }
       if (lightBlocks.length) {
@@ -946,7 +968,7 @@ async function build(structure = source, refit = true, slice = false) {
       let data = null
       if (entry && !AIR.test(entry.Name)) {
         try {
-          const name = LEGACY_RENAMES[entry.Name.replace("minecraft:", "")] ?? entry.Name
+          const name = await resolveRename(lib, assets, entry.Name)
           const props = fixLegacyProps(name.replace("minecraft:", ""), entry.Properties)
           const biome = entry.__biome ? { biome: entry.__biome } : null
           data = { name, props, models: [await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true, ...biome })], buckets: null }
@@ -1090,7 +1112,7 @@ async function build(structure = source, refit = true, slice = false) {
         let key = null
         const rot = new THREE.Matrix4()
         try {
-          const name = LEGACY_RENAMES[entry.Name.replace("minecraft:", "")] ?? entry.Name
+          const name = await resolveRename(lib, assets, entry.Name)
           const props = fixLegacyProps(name.replace("minecraft:", ""), entry.Properties)
           const models = await lib.parseBlockstate(assets, name, { data: props ?? {}, ignoreAtlases: true })
           const m = models.length === 1 ? models[0] : null
@@ -1123,8 +1145,8 @@ async function build(structure = source, refit = true, slice = false) {
     const optStruct = doorEntries.length ? { ...structure, blocks: structure.blocks.filter(b => !isOpenable(structure.palette[b.state])) } : structure
 
     // culling must see the renamed blocks: a legacy name's missing-model fallback occludes like a full cube
-    function legacyCull(name, props) {
-      const renamed = LEGACY_RENAMES[name.replace("minecraft:", "")] ?? name
+    async function legacyCull(name, props) {
+      const renamed = await resolveRename(lib, assets, name)
       return [renamed, fixLegacyProps(renamed.replace("minecraft:", ""), props)]
     }
     const buildMs = performance.now() - tBuild
@@ -1132,12 +1154,12 @@ async function build(structure = source, refit = true, slice = false) {
     const opt = await optimise(optStruct, templates, position, {
       lib,
       templateKey: b => tmplKey(b.state, variantAt(b.state, b.pos)),
-      getCullFaces: opts => {
-        const [id, blockstates] = legacyCull(opts.id, opts.blockstates)
+      getCullFaces: async opts => {
+        const [id, blockstates] = await legacyCull(opts.id, opts.blockstates)
         const neighbors = {}
         for (const [dir, n] of Object.entries(opts.neighbors ?? {})) {
           const { id: nid, ...props } = n
-          const [rid, rprops] = legacyCull(nid, props)
+          const [rid, rprops] = await legacyCull(nid, props)
           neighbors[dir] = { id: rid, ...(rprops ?? {}) }
         }
         return lib.getCullFaces({ id, blockstates, neighbors, assets })
